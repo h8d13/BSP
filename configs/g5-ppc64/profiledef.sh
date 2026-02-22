@@ -36,9 +36,106 @@ tarball="${script_dir}/ArchPOWER-ppc64-latest.tar.gz"
 source "${script_dir}/personal-creds.conf" 2>/dev/null || true
 
 # Package operations in chroot
+# Based on archiso/configs/releng-ppc64/packages.ppc64
 packages_install=(
-    "base" "linux-ppc64" "grub" "hfsutils"
-    "openssh" "networkmanager" "sudo" "nano"
+    # Core — must come first
+    "base"
+
+    # ArchPOWER specific
+    "archpower-keyring"
+    "brotli"
+    "haveged"
+    "hfsutils"
+    "hfsprogs"
+    "iprutils"
+    "linux-ppc64"
+    "mac-fdisk"
+
+    # System tools
+    "arch-install-scripts"
+    "bind"
+    "btrfs-progs"
+    "diffutils"
+    "dosfstools"
+    "ethtool"
+    "exfatprogs"
+    "hdparm"
+    "lsscsi"
+    "lvm2"
+    "mdadm"
+    "mkinitcpio"
+    "mtools"
+    "ntfs-3g"
+    "parted"
+    "partclone"
+    "partimage"
+    "sdparm"
+    "smartmontools"
+    "squashfs-tools"
+    "testdisk"
+    "usbutils"
+    "xfsprogs"
+
+    # Networking
+    "dhclient"
+    "dhcpcd"
+    "dnsmasq"
+    "gnu-netcat"
+    "iwd"
+    "linux-atm"
+    "modemmanager"
+    "nbd"
+    "ndisc6"
+    "nfs-utils"
+    "networkmanager"
+    "nmap"
+    "openssh"
+    "ppp"
+    "pptpclient"
+    "rp-pppoe"
+    "rsync"
+    "systemd-resolvconf"
+    "usb_modeswitch"
+    "vpnc"
+    "wireless-regdb"
+    "wireless_tools"
+    "wpa_supplicant"
+    "wvdial"
+    "xl2tpd"
+
+    # Shells & terminal
+    "grml-zsh-config"
+    "kitty-terminfo"
+    "rxvt-unicode-terminfo"
+    "tmux"
+    "zsh"
+
+    # Editors & misc
+    "man-db"
+    "man-pages"
+    "nano"
+    "vim"
+    "sudo"
+
+    # Audio
+    "alsa-utils"
+
+    # Web / transfer
+    "darkhttpd"
+    "lftp"
+    "lynx"
+
+    # Chat
+    "irssi"
+
+    # Braille
+    "brltty"
+
+    # RAID
+    "dmraid"
+
+    # Boot — G5 specific
+    "grub"
 )
 
 # Keyring init for archpower
@@ -49,9 +146,10 @@ pre_install() {
 
 # Chroot hooks — grub modules/config on ext4, locale, services
 post_install() {
-    mkdir -p /boot/grub/powerpc-ieee1275
+    mkdir -p /boot/grub/powerpc-ieee1275 /boot/grub/fonts
     cp /usr/lib/grub/powerpc-ieee1275/*.mod /boot/grub/powerpc-ieee1275/
     cp /usr/lib/grub/powerpc-ieee1275/*.lst /boot/grub/powerpc-ieee1275/ 2>/dev/null || true
+    cp /usr/share/grub/unicode.pf2 /boot/grub/fonts/ 2>/dev/null || true
     grub-mkconfig -o /boot/grub/grub.cfg
     locale-gen
     systemctl enable NetworkManager
