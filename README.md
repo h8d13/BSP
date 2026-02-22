@@ -40,7 +40,7 @@ sudo ./flash archlinux-g5-ppc64-20260222 /dev/sdX
 Create `personal-creds.conf` (gitignored) to set a default user:
 
 ```bash
-USERNAME=hadean
+USERNAME=john
 PASSWORD=changeme
 ```
 
