@@ -13,10 +13,11 @@ sudo usermod -aG docker $USER        # log out/in after or nwgroup docker
 ## Quick start
 
 ```bash
+# optional create tarballs see gen_tarball
 docker compose build
-docker compose run --rm buildit g5-ppc64
-./extract archlinux-g5-ppc64-20260222
-sudo ./flash archlinux-g5-ppc64-20260222 /dev/sdX
+docker compose run --rm buildit g5-ppc64 # will be in out/
+./extract archlinux-g5-ppc64-20260222 # will be in out_extract/
+sudo ./flash archlinux-g5-ppc64-20260222 /dev/sdX # will extra
 ```
 
 ## Available profiles
