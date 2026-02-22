@@ -1,0 +1,17 @@
+services:
+  builder:
+    build: .
+    cap_add:
+      - SYS_ADMIN      # mount, losetup, arch-chroot
+      - MKNOD           # create /dev/loop partition nodes
+    security_opt:
+      - seccomp:unconfined  # allow mount/umount/losetup syscalls
+    devices:
+      - /dev/loop-control
+    device_cgroup_rules:
+      - 'b 7:* rmw'      # loop devices (major 7)
+      - 'b 259:* rmw'    # loop partition devices (extended major)
+    environment:
+      - TMPDIR=/build/.tmp
+    volumes:
+      - .:/build

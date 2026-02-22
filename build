@@ -1,0 +1,14 @@
+#!/bin/bash
+# Convenience wrapper
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROFILE="${1:-}"
+
+[[ -z "${PROFILE}" ]] && { echo "Usage: ${0##*/} <profile>" >&2; echo "Available: $(ls "${SCRIPT_DIR}/configs/")" >&2; exit 1; }
+[[ -d "${SCRIPT_DIR}/configs/${PROFILE}" ]] || { echo "No such profile: ${PROFILE}" >&2; echo "Available: $(ls "${SCRIPT_DIR}/configs/")" >&2; exit 1; }
+
+SUDO=$( [[ $EUID -eq 0 ]] && echo "" || echo "sudo" )
+${SUDO} "${SCRIPT_DIR}/mkimg" \
+    -p "${SCRIPT_DIR}/configs/${PROFILE}" \
+    -o "${SCRIPT_DIR}/out"

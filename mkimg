@@ -1,0 +1,493 @@
+#!/bin/bash
+# mkimg — Device-agnostic image builder
+# Reads a profile directory (archiso-style) and produces a ready-to-flash .img.xz
+
+set -euo pipefail
+
+readonly VERSION="0.1.0"
+readonly PROGNAME="${0##*/}"
+
+# ── Defaults ─────────────────────────────────────────────────────────────────
+profile_dir=""
+work_dir=""
+out_dir=""
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+
+# ── State (set during build) ────────────────────────────────────────────────
+loop_dev=""
+mount_root=""
+img_file=""
+
+# ── Profile variables (populated by sourcing profiledef.sh) ─────────────────
+device_name=""
+arch=""
+img_size=""
+partition_table=""
+partitions=()
+tarball=""
+packages_remove=()
+packages_install=()
+boot_cleanup=()
+generate_ssh_keys="false"
+compression_opts=()
+
+# ── Colours ──────────────────────────────────────────────────────────────────
+if [[ -t 1 ]]; then
+    B='\033[1m'; R='\033[0m'; RED='\033[1;31m'; GRN='\033[1;32m'; YLW='\033[1;33m'; CYN='\033[1;36m'
+else
+    B=''; R=''; RED=''; GRN=''; YLW=''; CYN=''
+fi
+
+# ── Logging ──────────────────────────────────────────────────────────────────
+_msg()  { printf "${CYN}[${PROGNAME}]${R} %s\n" "$*"; }
+_ok()   { printf "${GRN}[${PROGNAME}] ✓${R} %s\n" "$*"; }
+_warn() { printf "${YLW}[${PROGNAME}] !${R} %s\n" "$*" >&2; }
+_die()  { printf "${RED}[${PROGNAME}] ✗${R} %s\n" "$*" >&2; exit 1; }
+
+# ── Usage ────────────────────────────────────────────────────────────────────
+_usage() {
+    cat <<EOF
+${B}${PROGNAME}${R} ${VERSION} — Image builder
+
+${B}Usage:${R}
+    ${PROGNAME} -p <profile_dir> [-o <out_dir>]
+
+${B}Options:${R}
+    -p <dir>    Profile directory (must contain profiledef.sh)
+    -o <dir>    Output directory for final image
+                  (default: out/)
+    -h          Show this help
+EOF
+    exit "${1:-0}"
+}
+
+# ── Argument parsing ────────────────────────────────────────────────────────
+while getopts ":p:o:h" opt; do
+    case "${opt}" in
+        p) profile_dir="${OPTARG}" ;;
+        o) out_dir="${OPTARG}" ;;
+        h) _usage 0 ;;
+        :) _die "Option -${OPTARG} requires an argument" ;;
+        *) _die "Unknown option -${OPTARG}" ;;
+    esac
+done
+
+[[ -z "${profile_dir}" ]] && _die "Profile directory required (-p). See -h for usage."
+
+# Resolve to absolute paths
+profile_dir="$(cd "${profile_dir}" && pwd)"
+mkdir -p "${TMPDIR:-/tmp}"
+work_dir="$(mktemp -d "${TMPDIR:-/tmp}/${PROGNAME}.XXXXXXXXXX")"
+out_dir="${out_dir:-${script_dir}/out}"
+
+# ── Cleanup trap ─────────────────────────────────────────────────────────────
+_cleanup() {
+    local rc=$?
+    set +e
+    if [[ -n "${mount_root}" && -d "${mount_root}" ]]; then
+        _warn "Cleaning up mounts..."
+        # Unmount in reverse depth order
+        findmnt -rn -o TARGET --submounts "${mount_root}" 2>/dev/null \
+            | sort -r \
+            | while read -r mp; do umount -l "$mp" 2>/dev/null; done
+    fi
+    if [[ -n "${loop_dev}" ]]; then
+        _warn "Detaching loop device ${loop_dev}..."
+        losetup -d "${loop_dev}" 2>/dev/null
+    fi
+    if [[ ${rc} -ne 0 ]]; then
+        _die "Build failed (exit ${rc}). Work dir preserved at: ${work_dir}"
+    else
+        rm -rf "${work_dir}"
+        rmdir "${work_dir%/*}" 2>/dev/null || true
+    fi
+}
+trap _cleanup EXIT
+
+# ── Pipeline stages ──────────────────────────────────────────────────────────
+
+_validate_profile() {
+    _msg "Validating profile: ${profile_dir}"
+
+    [[ -f "${profile_dir}/profiledef.sh" ]] \
+        || _die "Missing profiledef.sh in ${profile_dir}"
+
+    # Source the profile
+    # shellcheck source=/dev/null
+    source "${profile_dir}/profiledef.sh"
+
+    # Check required variables
+    local required=(device_name arch img_size partition_table tarball)
+    for var in "${required[@]}"; do
+        [[ -n "${!var:-}" ]] || _die "Profile missing required variable: ${var}"
+    done
+
+    [[ -f "${tarball}" ]] || _die "Tarball not found: ${tarball}"
+    [[ ${#partitions[@]} -ge 1 ]] || _die "Profile must define at least one partition"
+
+    # Check required host tools
+    local tools=(parted mkfs.vfat mkfs.ext4 losetup bsdtar arch-chroot blkid)
+    for tool in "${tools[@]}"; do
+        command -v "${tool}" &>/dev/null || _die "Missing required tool: ${tool}"
+    done
+
+    # Check pacman.conf
+    [[ -f "${profile_dir}/pacman.conf" ]] \
+        || _warn "No pacman.conf in profile — will use image default"
+
+    _ok "Profile valid: ${device_name} (${arch})"
+}
+
+_create_image() {
+    local img_name
+    img_name="archlinuxarm-${profile_dir##*/}-$(date +%Y%m%d).img"
+    img_file="${work_dir}/${img_name}"
+
+    _msg "Creating ${img_size} image: ${img_file}"
+    mkdir -p "${work_dir}" "${out_dir}"
+    truncate -s "${img_size}" "${img_file}"
+
+    # Ensure loop device nodes exist (containers lack udev)
+    for i in $(seq 0 15); do
+        [[ -b /dev/loop$i ]] || mknod /dev/loop$i b 7 $i 2>/dev/null || true
+    done
+
+    # Attach loop device
+    loop_dev="$(losetup --find --show --partscan "${img_file}")"
+    _ok "Loop device: ${loop_dev}"
+
+    # Create partition table
+    parted -s "${loop_dev}" mklabel "${partition_table}"
+
+    # Parse and create partitions
+    local offset="1MiB"
+    local idx=1
+    local part_end
+
+    for spec in "${partitions[@]}"; do
+        read -r ptype psize plabel <<< "${spec}"
+
+        if [[ "${psize}" == "rest" ]]; then
+            part_end="100%"
+        else
+            part_end="$(_offset_add "${offset}" "${psize}")"
+        fi
+
+        parted -s -a optimal "${loop_dev}" mkpart primary "${ptype}" "${offset}" "${part_end}"
+
+        _msg "  Partition ${idx}: ${ptype} ${psize} (${plabel}) [${offset} → ${part_end}]"
+
+        # Mark first fat32 as boot
+        if [[ "${ptype}" == "fat32" && "${partition_table}" == "msdos" ]]; then
+            parted -s "${loop_dev}" set "${idx}" boot on
+        fi
+
+        offset="${part_end}"
+        (( idx++ ))
+    done
+
+    # Reattach with --partscan so the kernel registers the partitions
+    local _img="${img_file}"
+    losetup -d "${loop_dev}"
+    loop_dev="$(losetup --find --show --partscan "${_img}")"
+    _msg "Reattached: ${loop_dev} (partscan)"
+    sleep 1
+
+    # Without udev, /dev nodes won't appear — create them from sysfs
+    local loop_name="${loop_dev##*/}"
+    for syspart in "/sys/block/${loop_name}/${loop_name}p"*; do
+        [[ -d "${syspart}" ]] || continue
+        local pname="${syspart##*/}"
+        if [[ ! -b "/dev/${pname}" ]]; then
+            local devnum pmajor pminor
+            devnum=$(< "${syspart}/dev")
+            pmajor="${devnum%%:*}"
+            pminor="${devnum##*:}"
+            mknod "/dev/${pname}" b "${pmajor}" "${pminor}"
+            _msg "  Created /dev/${pname} (${pmajor}:${pminor})"
+        fi
+    done
+
+    _ok "Partition table created"
+}
+
+# Helper: add two sizes like "1MiB" + "512M" → "513MiB"
+_offset_add() {
+    local a="${1//[!0-9]/}"
+    local b="${2//[!0-9]/}"
+    echo "$(( a + b ))MiB"
+}
+
+_format_partitions() {
+    _msg "Formatting partitions..."
+
+    local idx=1
+    for spec in "${partitions[@]}"; do
+        read -r ptype _ plabel <<< "${spec}"
+        local part_dev="${loop_dev}p${idx}"
+
+        # Wait for partition device to appear
+        local tries=0
+        while [[ ! -b "${part_dev}" && ${tries} -lt 10 ]]; do
+            sleep 0.5
+            (( tries++ ))
+        done
+        [[ -b "${part_dev}" ]] || _die "Partition device ${part_dev} did not appear"
+
+        case "${ptype}" in
+            fat32|fat16) mkfs.vfat -F "${ptype#fat}" -n "${plabel^^}" "${part_dev}" ;; # dosfstools
+            ext[234])    mkfs.${ptype} -F -L "${plabel}" "${part_dev}" ;;              # e2fsprogs
+            btrfs)       mkfs.btrfs -f -L "${plabel}" "${part_dev}" ;;                 # btrfs-progs
+            xfs)         mkfs.xfs -f -L "${plabel}" "${part_dev}" ;;                   # xfsprogs
+            f2fs)        mkfs.f2fs -l "${plabel}" "${part_dev}" ;;                     # f2fs-tools
+            swap)        mkswap -L "${plabel}" "${part_dev}" ;;                        # util-linux
+            *)           _die "Unknown filesystem type: ${ptype}" ;;
+        esac
+
+        _ok "  ${part_dev}: ${ptype} (${plabel})"
+        (( idx++ ))
+    done
+}
+
+_mount_image() {
+    mount_root="${work_dir}/rootfs"
+    _msg "Mounting image at ${mount_root}"
+    mkdir -p "${mount_root}"
+
+    # Mount partitions — root first, then others on top
+    # We need to figure out which partition is root and which is boot
+    local idx=1
+    local root_dev="" boot_dev=""
+
+    for spec in "${partitions[@]}"; do
+        read -r _ _ plabel <<< "${spec}"
+        case "${plabel}" in
+            root) root_dev="${loop_dev}p${idx}" ;;
+            boot) boot_dev="${loop_dev}p${idx}" ;;
+        esac
+        (( idx++ ))
+    done
+
+    [[ -n "${root_dev}" ]] || _die "No partition labelled 'root' found in profile"
+
+    mount "${root_dev}" "${mount_root}"
+    _ok "  ${root_dev} → ${mount_root}"
+
+    if [[ -n "${boot_dev}" ]]; then
+        mkdir -p "${mount_root}/boot"
+        mount "${boot_dev}" "${mount_root}/boot"
+        _ok "  ${boot_dev} → ${mount_root}/boot"
+    fi
+}
+
+_extract_tarball() {
+    _msg "Extracting tarball: ${tarball##*/}"
+
+    # Verify mount is writable
+    touch "${mount_root}/.mount_test" || _die "Root mount not writable: ${mount_root}"
+    rm -f "${mount_root}/.mount_test"
+
+    bsdtar -xpf "${tarball}" -C "${mount_root}" &
+    local pid=$!
+
+    while kill -0 "${pid}" 2>/dev/null; do
+        local dirty
+        dirty=$(awk '/Dirty:/{print $2}' /proc/meminfo)
+        printf "\r  Extracting... Dirty: %'d kB  " "${dirty}"
+        sleep 1
+    done
+    local rc=0
+    wait "${pid}" || rc=$?
+    printf "\r  Extracting... Done!                        \n"
+    [[ ${rc} -eq 0 ]] || _die "bsdtar failed (exit ${rc})"
+
+    _ok "Tarball extracted"
+}
+
+_apply_overlay() {
+    local airootfs="${profile_dir}/airootfs"
+    if [[ ! -d "${airootfs}" ]]; then
+        _warn "No airootfs directory — skipping overlay"
+        return
+    fi
+
+    _msg "Applying filesystem overlay..."
+
+    # Copy overlay preserving permissions and symlinks
+    # --no-preserve=ownership: FAT32 partitions (boot) don't support Unix ownership
+    cp -r --preserve=mode,timestamps --no-preserve=ownership "${airootfs}/." "${mount_root}/"
+
+    # If profile has a pacman.conf, install it
+    if [[ -f "${profile_dir}/pacman.conf" ]]; then
+        cp "${profile_dir}/pacman.conf" "${mount_root}/etc/pacman.conf"
+        _ok "  Installed pacman.conf"
+    fi
+
+    _ok "Overlay applied"
+}
+
+_chroot_customize() {
+    _msg "Customizing image in chroot..."
+
+    # Run profile's pre_install hook if defined (keyring init, etc.)
+    if declare -f pre_install &>/dev/null; then
+        _msg "  Running pre_install hook..."
+        local pre_install_body
+        pre_install_body="$(declare -f pre_install | tail -n +3 | head -n -1)"
+        env -u TMPDIR arch-chroot "${mount_root}" /bin/bash -c "${pre_install_body}"
+    fi
+
+    # Remove packages
+    if declare -p packages_remove &>/dev/null && [[ ${#packages_remove[@]} -gt 0 ]]; then
+        _msg "  Removing packages: ${packages_remove[*]}"
+        env -u TMPDIR arch-chroot "${mount_root}" pacman -Rns --noconfirm "${packages_remove[@]}"
+    fi
+
+    # Install packages
+    if declare -p packages_install &>/dev/null && [[ ${#packages_install[@]} -gt 0 ]]; then
+        _msg "  Installing packages: ${packages_install[*]}"
+        env -u TMPDIR arch-chroot "${mount_root}" pacman -Sy --noconfirm --needed "${packages_install[@]}"
+    fi
+
+    # Run profile's post_install hook if defined
+    if declare -f post_install &>/dev/null; then
+        _msg "  Running post_install hook..."
+        local post_install_body
+        post_install_body="$(declare -f post_install | tail -n +3 | head -n -1)"
+        env -u TMPDIR arch-chroot "${mount_root}" /bin/bash -c "${post_install_body}"
+    fi
+    _ok "Chroot customization complete"
+}
+
+_stamp_templates() {
+    _msg "Stamping template files..."
+
+    # Gather PARTUUIDs
+    local idx=1
+    declare -A tpl_vars
+    tpl_vars["%DATE%"]="$(date +%Y-%m-%d)"
+
+    for spec in "${partitions[@]}"; do
+        read -r _ _ plabel <<< "${spec}"
+        local part_dev="${loop_dev}p${idx}"
+        local puuid
+        puuid="$(blkid -s PARTUUID -o value "${part_dev}")"
+
+        local key="%${plabel^^}_PARTUUID%"
+        tpl_vars["${key}"]="${puuid}"
+        _msg "  ${key} = ${puuid}"
+        (( idx++ ))
+    done
+
+    # Find all .tpl files and substitute
+    while IFS= read -r -d '' tpl_file; do
+        local target="${tpl_file%.tpl}"
+
+        # Copy template to target
+        cp "${tpl_file}" "${target}"
+
+        # Apply all substitutions
+        for key in "${!tpl_vars[@]}"; do
+            sed -i "s|${key}|${tpl_vars[${key}]}|g" "${target}"
+        done
+
+        # Remove the template
+        rm "${tpl_file}"
+        _ok "  ${target#"${mount_root}"}"
+    done < <(find "${mount_root}" -name '*.tpl' -print0)
+}
+
+_generate_ssh_keys() {
+    if [[ "${generate_ssh_keys:-false}" != "true" ]]; then
+        return
+    fi
+
+    _msg "Generating SSH host keys..."
+    ssh-keygen -A -f "${mount_root}"
+    _ok "SSH host keys generated"
+}
+
+_cleanup_boot() {
+    if ! declare -p boot_cleanup &>/dev/null || [[ ${#boot_cleanup[@]} -eq 0 ]]; then
+        return
+    fi
+
+    _msg "Cleaning up boot files..."
+    for f in "${boot_cleanup[@]}"; do
+        if [[ -f "${mount_root}/boot/${f}" ]]; then
+            rm -f "${mount_root}/boot/${f}"
+            _ok "  Removed boot/${f}"
+        fi
+    done
+}
+
+_finalize() {
+    _msg "Syncing and unmounting..."
+
+    sync &
+    local pid=$!
+    while kill -0 "${pid}" 2>/dev/null; do
+        local dirty
+        dirty=$(awk '/Dirty:/{print $2}' /proc/meminfo)
+        printf "\r  Flushing... Dirty: %'d kB remaining  " "${dirty}"
+        sleep 1
+    done
+    wait "${pid}"
+    printf "\r  Flushing... Done!                        \n"
+
+    # Unmount in reverse order
+    findmnt -rn -o TARGET --submounts "${mount_root}" 2>/dev/null \
+        | sort -r \
+        | while read -r mp; do umount "$mp"; done
+
+    # Detach loop device
+    losetup -d "${loop_dev}"
+    local detached_loop="${loop_dev}"
+    loop_dev=""      # Prevent cleanup trap from double-detaching
+    mount_root=""    # Prevent cleanup trap from double-unmounting
+
+    _ok "Image finalized (loop ${detached_loop} detached)"
+}
+
+_compress() {
+    local -a opts=()
+    if [[ -n "${compression_opts+x}" ]]; then
+        opts=("${compression_opts[@]}")
+    fi
+
+    local out_name="${img_file##*/}.xz"
+    local out_path="${out_dir}/${out_name}"
+
+    _msg "Compressing: ${out_name} (xz ${opts[*]:-})"
+
+    xz "${opts[@]}" --stdout "${img_file}" > "${out_path}"
+
+    local size
+    size="$(du -h "${out_path}" | cut -f1)"
+    _ok "Output: ${out_path} (${size})"
+}
+
+# ── Main ─────────────────────────────────────────────────────────────────────
+
+main() {
+    [[ $EUID -eq 0 ]] || _die "Must run as root"
+
+    _validate_profile
+    _create_image
+    _format_partitions
+    _mount_image
+    _extract_tarball
+    _apply_overlay
+    _chroot_customize
+    _stamp_templates
+    _generate_ssh_keys
+    _cleanup_boot
+    _finalize
+    _compress
+
+    echo ""
+    _ok "Build complete for: ${device_name}"
+    echo ""
+}
+
+main "$@"
