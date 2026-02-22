@@ -7,7 +7,7 @@
 
 ## Requirements
 
-Install host dependencies (Arch Linux):
+Install host dependencies (Assumes `base-devel` and priv-esc configured in `/etc/makepkg.conf`):
 
 ```bash
 makepkg -si
