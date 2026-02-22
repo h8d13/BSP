@@ -1,134 +1,95 @@
-# BS: BootShimPorts - mkimg
----
+# stage-one-builder
 
-> A stage one Arch Linux image builder.
-
----
+Build ready-to-flash Arch Linux images for any device in minutes.
 
 ## Requirements
 
-Install host dependencies (Assumes `base-devel` and priv-esc configured in `/etc/makepkg.conf`):
-
 ```bash
-makepkg -si
+makepkg -si                          # pulls docker, qemu-user-static, etc.
+sudo systemctl enable --now docker
+sudo usermod -aG docker $USER        # log out/in after or nwgroup docker
 ```
 
-This pulls in `docker`, `docker-compose`, `qemu-user-static`, and `qemu-user-static-binfmt`.
-
-Then enable Docker:
-
-```bash
-sudo systemctl enable --now docker.service
-sudo usermod -aG docker $USER
-# Log out and back in for the group change to take effect
-# Or $ newgrp docker 
-```
-
-## Usage
-
-### Build
+## Quick start
 
 ```bash
 docker compose build
-docker compose run builder rpi5
+docker compose run --rm buildit g5-ppc64
+./extract archlinux-g5-ppc64-20260222
+sudo ./flash archlinux-g5-ppc64-20260222 /dev/sdX
 ```
 
-One liner: `docker compose build && docker compose run builder rpi5`
+## Available profiles
 
-Output lands in `out/` as a compressed `.img.xz`.
+| Profile | Device | Arch | Boot method |
+|---|---|---|---|
+| `rpi5` | Raspberry Pi 5 | aarch64 | config.txt |
+| `g5-ppc64` | PowerMac G5 | ppc64 | Open Firmware (`boot ud:2,\grub`) |
 
-### Clean
+## Scripts
+
+| Script | Usage |
+|---|---|
+| `build <profile>` | Build an image (wraps docker compose) |
+| `extract <image>` | Decompress `.img.xz` from `out/` to `out_extract/` with progress |
+| `flash <image> <device>` | Write extracted image to block device with confirmation |
+
+## Personal credentials
+
+Create `personal-creds.conf` (gitignored) to set a default user:
+
+```bash
+USERNAME=hadean
+PASSWORD=changeme
+```
+
+The build creates the user in the `wheel` group with sudo access. Without this file, root gets an empty password.
+
+## Profile structure
+
+```
+configs/<name>/
+  profiledef.sh        # Build config: partitions, packages, hooks
+  pacman.conf          # Installed into the image
+  airootfs/            # Filesystem overlay (mirrors target /)
+    etc/
+      fstab.tpl        # Template — %ROOT_UUID% stamped at build time
+      mkinitcpio.conf  # initramfs config
+      ...
+```
+
+### profiledef.sh variables
+
+| Variable | Example |
+|---|---|
+| `device_name` | `"PowerMac G5"` |
+| `arch` | `ppc64`, `aarch64` |
+| `img_size` | `2G` |
+| `partition_table` | `mac`, `msdos`, `gpt` |
+| `partitions` | `("hfs 32M bootstrap" "ext4 rest root")` |
+| `tarball` | Path to base rootfs `.tar.gz` |
+| `packages_install` | `("base" "linux-ppc64" "grub" ...)` |
+| `packages_remove` | Packages to remove in chroot |
+| `compression_opts` | `("-T0" "-6")` |
+| `generate_ssh_keys` | `true` |
+
+### Hooks
+
+| Function | Runs | Example |
+|---|---|---|
+| `pre_install()` | In chroot, before packages | `pacman-key --init` |
+| `post_install()` | In chroot, after packages | `grub-mkconfig`, `locale-gen` |
+| `post_build()` | On host, image still mounted | Bootloader install, user creation |
+
+### Template variables
+
+Files ending in `.tpl` get these replaced, then `.tpl` is stripped:
+
+`%ROOT_UUID%`, `%ROOT_PARTUUID%`, `%BOOT_UUID%`, `%BOOT_PARTUUID%`, `%BOOTSTRAP_UUID%`, `%BOOTSTRAP_PARTUUID%`, `%DATE%`
+
+## Clean
 
 ```bash
 docker compose down
-rm -f out/*.img.xz
-```
-
-`.tmp/` is cleaned up automatically on successful builds.
-
-### Rebuild the Docker image
-
-```bash
-docker compose build --no-cache
-```
-
-### Flash
-
-```bash
-xz -d < out/archlinuxarm-rpi5-*.img.xz | sudo dd of=/dev/sdX bs=4M status=progress
-```
-
-Replace `/dev/sdX` with your target device. CAREFUL WITH THIS.
-
-## Configuration
-
-Profiles live under `configs/<name>/`. Pass the profile name as an argument:
-
-```bash
-docker compose run builder <profile>
-```
-
-A profile directory contains:
-
-```
-configs/rpi5/
-  profiledef.sh          # Main profile definition
-  pacman.conf            # Pacman config installed into the image
-  airootfs/              # Filesystem overlay copied onto the rootfs
-    boot/
-      config.txt         # Static boot config
-      cmdline.txt.tpl    # Template — %ROOT_PARTUUID% gets stamped at build time
-    etc/
-      fstab.tpl          # Template — PARTUUIDs stamped at build time
-      locale.conf
-      locale.gen
-      vconsole.conf
-      systemd/
-        network/          # networkd configs
-        system/           # systemd unit symlinks (enable services)
-```
-
-### profiledef.sh
-
-The main build configuration. Sourced as bash:
-
-| Variable | Description |
-|---|---|
-| `device_name` | Human-readable device name |
-| `arch` | Target architecture (e.g. `aarch64`) |
-| `img_size` | Image size (e.g. `4G`) |
-| `partition_table` | Partition table type (`msdos` or `gpt`) |
-| `partitions` | Array of `"type size label"` specs (e.g. `"fat32 512M boot"`, `"ext4 rest root"`) |
-| `tarball` | Path to the base rootfs tarball |
-| `packages_remove` | Packages to remove in chroot |
-| `packages_install` | Packages to install in chroot |
-| `boot_cleanup` | Files to remove from `/boot` after package operations |
-| `generate_ssh_keys` | Set to `true` to generate SSH host keys |
-| `compression_opts` | Options passed to xz (e.g. `("-T0" "--best")`) |
-
-Optional hooks (bash functions):
-
-| Function | When |
-|---|---|
-| `pre_install()` | Before package operations (e.g. `pacman-key --init`) |
-| `post_install()` | After package operations (e.g. `locale-gen`) |
-
-### airootfs/
-
-Files here are copied directly onto the root filesystem. Directory structure mirrors the target — `airootfs/etc/fstab.tpl` becomes `/etc/fstab.tpl` in the image.
-
-Files ending in `.tpl` are templates. The builder replaces these variables and removes the `.tpl` extension:
-
-| Variable | Value |
-|---|---|
-| `%BOOT_PARTUUID%` | PARTUUID of the boot partition |
-| `%ROOT_PARTUUID%` | PARTUUID of the root partition |
-| `%DATE%` | Build date (YYYY-MM-DD) |
-
-### Adding a new profile
-
-```bash
-cp -r configs/rpi5 configs/mydevice
-# Edit configs/mydevice/profiledef.sh and airootfs/ as needed
-docker compose run builder mydevice
+rm -f out/*.img.xz out_extract/*.img
 ```

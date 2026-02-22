@@ -1,0 +1,31 @@
+#!/bin/bash
+# bootstrap — Create a rootfs tarball for a profile using pacstrap
+# Requires: qemu-user-static-binfmt (for cross-arch), arch-install-scripts
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROFILE="${1:-}"
+
+[[ -z "${PROFILE}" ]] && { echo "Usage: ${0##*/} <profile>" >&2; echo "Available: $(ls "${SCRIPT_DIR}/configs/")" >&2; exit 1; }
+[[ -d "${SCRIPT_DIR}/configs/${PROFILE}" ]] || { echo "No such profile: ${PROFILE}" >&2; exit 1; }
+
+script_dir="${SCRIPT_DIR}"
+source "${SCRIPT_DIR}/configs/${PROFILE}/profiledef.sh"
+
+[[ -f "${tarball}" ]] && { echo "Tarball already exists: ${tarball}"; echo "Delete it first to re-bootstrap."; exit 0; }
+
+WORK="$(mktemp -d)"
+trap "rm -rf ${WORK}" EXIT
+
+# Relax signature checking for bootstrap (real image build uses profile's pacman.conf)
+BOOTSTRAP_CONF="${WORK}/pacman.conf"
+sed 's/SigLevel.*/SigLevel = Never/' "${SCRIPT_DIR}/configs/${PROFILE}/pacman.conf" > "${BOOTSTRAP_CONF}"
+
+echo "==> Bootstrapping ${arch} rootfs for ${device_name}..."
+mkdir -p "${WORK}/rootfs"
+pacstrap -GMC "${BOOTSTRAP_CONF}" "${WORK}/rootfs" base archpower-keyring
+
+echo "==> Creating tarball: ${tarball##*/}..."
+tar czf "${tarball}" -C "${WORK}/rootfs" .
+
+echo "==> Done: ${tarball##*/} ($(du -h "${tarball}" | cut -f1))"

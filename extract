@@ -1,0 +1,90 @@
+#!/bin/bash
+# extract — Decompress a specific .img.xz from out/ into out_extract/ with progress
+set -euo pipefail
+
+readonly PROGNAME="${0##*/}"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+
+src_dir="${script_dir}/out"
+dst_dir="${script_dir}/out_extract"
+
+# ── Colours ───────────────────────────────────────────────────────────────
+if [[ -t 1 ]]; then
+    B='\033[1m'; R='\033[0m'; RED='\033[1;31m'; GRN='\033[1;32m'; YLW='\033[1;33m'; CYN='\033[1;36m'
+else
+    B=''; R=''; RED=''; GRN=''; YLW=''; CYN=''
+fi
+
+_msg()  { printf "${CYN}[${PROGNAME}]${R} %s\n" "$*"; }
+_ok()   { printf "${GRN}[${PROGNAME}] ✓${R} %s\n" "$*"; }
+_die()  { printf "${RED}[${PROGNAME}] ✗${R} %s\n" "$*" >&2; exit 1; }
+
+_usage() {
+    cat <<EOF
+${B}${PROGNAME}${R} — Extract .img.xz with progress
+
+${B}Usage:${R}
+    ${PROGNAME} <image-name>
+
+${B}Example:${R}
+    ${PROGNAME} archlinuxarm-rpi5-20260222.img.xz
+    ${PROGNAME} archlinuxarm-rpi5-20260222     # .img.xz suffix is optional
+
+Decompresses out/<image> into out_extract/ with a progress bar.
+EOF
+    exit "${1:-0}"
+}
+
+# ── Dependency check ──────────────────────────────────────────────────────
+command -v xz &>/dev/null || _die "Missing required tool: xz"
+
+# ── Argument parsing ──────────────────────────────────────────────────────
+[[ $# -ge 1 ]] || _usage 1
+[[ "$1" == "-h" || "$1" == "--help" ]] && _usage 0
+
+input="$1"
+
+# Allow specifying with or without .img.xz suffix
+if [[ "${input}" == *.img.xz ]]; then
+    img="${src_dir}/${input}"
+elif [[ "${input}" == *.img ]]; then
+    img="${src_dir}/${input}.xz"
+else
+    img="${src_dir}/${input}.img.xz"
+fi
+
+[[ -f "${img}" ]] || _die "Not found: ${img}"
+
+# ── Extract ───────────────────────────────────────────────────────────────
+name="$(basename "${img}" .xz)"
+dst="${dst_dir}/${name}"
+mkdir -p "${dst_dir}"
+
+if [[ -f "${dst}" ]]; then
+    _die "Already exists: ${dst}"
+fi
+
+total="$(stat -c %s "${img}")"
+_msg "Extracting: ${img##*/} → out_extract/${name}"
+
+# Background the decompression and poll progress via bytes written to dst
+xz -d < "${img}" > "${dst}" &
+pid=$!
+
+while kill -0 "${pid}" 2>/dev/null; do
+    if [[ -f "${dst}" ]]; then
+        current="$(stat -c %s "${dst}" 2>/dev/null || echo 0)"
+        # Estimate compressed progress from decompressed output ratio
+        printf "\r  %s / %s decompressed  " \
+            "$(numfmt --to=iec-i --suffix=B "${current}")" \
+            "$(numfmt --to=iec-i --suffix=B "${total}")"
+    fi
+    sleep 1
+done
+
+rc=0
+wait "${pid}" || rc=$?
+printf "\r                                                \r"
+[[ ${rc} -eq 0 ]] || { rm -f "${dst}"; _die "xz decompression failed (exit ${rc})"; }
+
+_ok "${name} ($(du -h "${dst}" | cut -f1))"

@@ -1,7 +1,7 @@
 FROM archlinux:latest
 
 # Install build dependencies required by mkimg
-# Core tools
+# Additional filesystem support if needed: btrfs-progs, xfsprogs, f2fs-tools
 RUN pacman -Syu --noconfirm --needed \
         arch-install-scripts \
         libarchive \
@@ -9,13 +9,9 @@ RUN pacman -Syu --noconfirm --needed \
         parted \
         util-linux \
         xz \
-        # Filesystem tools (default profile: fat32 + ext4)
         dosfstools \
         e2fsprogs \
-        # Uncomment for additional filesystem support:
-        # btrfs-progs \
-        # xfsprogs \
-        # f2fs-tools \
+        grub \
     && pacman -Scc --noconfirm
 
 WORKDIR /build

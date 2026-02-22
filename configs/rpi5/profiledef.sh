@@ -39,4 +39,4 @@ generate_ssh_keys=true
 
 # Output compression
 compression="xz"
-compression_opts=("-T0" "--best")
+compression_opts=("-T0" "-6")

@@ -126,7 +126,7 @@ _validate_profile() {
     [[ ${#partitions[@]} -ge 1 ]] || _die "Profile must define at least one partition"
 
     # Check required host tools
-    local tools=(parted mkfs.vfat mkfs.ext4 losetup bsdtar arch-chroot blkid)
+    local tools=(parted losetup bsdtar arch-chroot blkid)
     for tool in "${tools[@]}"; do
         command -v "${tool}" &>/dev/null || _die "Missing required tool: ${tool}"
     done
@@ -140,7 +140,7 @@ _validate_profile() {
 
 _create_image() {
     local img_name
-    img_name="archlinuxarm-${profile_dir##*/}-$(date +%Y%m%d).img"
+    img_name="archlinux-${profile_dir##*/}-$(date +%Y%m%d).img"
     img_file="${work_dir}/${img_name}"
 
     _msg "Creating ${img_size} image: ${img_file}"
@@ -173,13 +173,23 @@ _create_image() {
             part_end="$(_offset_add "${offset}" "${psize}")"
         fi
 
-        parted -s -a optimal "${loop_dev}" mkpart primary "${ptype}" "${offset}" "${part_end}"
+        # msdos uses "primary", mac/gpt use partition name
+        if [[ "${partition_table}" == "msdos" ]]; then
+            parted -s -a optimal "${loop_dev}" mkpart primary "${ptype}" "${offset}" "${part_end}"
+        else
+            parted -s -a optimal "${loop_dev}" mkpart "${plabel}" "${ptype}" "${offset}" "${part_end}"
+        fi
 
         _msg "  Partition ${idx}: ${ptype} ${psize} (${plabel}) [${offset} → ${part_end}]"
 
-        # Mark first fat32 as boot
+        # Parted partition number (mac: +1 for hidden map entry)
+        local parted_num=$(( idx + $(_part_offset) ))
+
+        # Mark boot partition
         if [[ "${ptype}" == "fat32" && "${partition_table}" == "msdos" ]]; then
-            parted -s "${loop_dev}" set "${idx}" boot on
+            parted -s "${loop_dev}" set "${parted_num}" boot on
+        elif [[ "${ptype}" == "hfs" && "${partition_table}" == "mac" ]]; then
+            parted -s "${loop_dev}" set "${parted_num}" boot on
         fi
 
         offset="${part_end}"
@@ -218,13 +228,25 @@ _offset_add() {
     echo "$(( a + b ))MiB"
 }
 
+# Helper: Apple Partition Maps have a hidden map entry as kernel partition 1,
+# so user partitions start at p2. For msdos/gpt they start at p1.
+_part_offset() {
+    [[ "${partition_table}" == "mac" ]] && echo 1 || echo 0
+}
+
+# Get the /dev path for a partition by its index (1-based from partitions array)
+_part_dev() {
+    echo "${loop_dev}p$(( $1 + $(_part_offset) ))"
+}
+
 _format_partitions() {
     _msg "Formatting partitions..."
 
     local idx=1
     for spec in "${partitions[@]}"; do
         read -r ptype _ plabel <<< "${spec}"
-        local part_dev="${loop_dev}p${idx}"
+        local part_dev
+        part_dev="$(_part_dev ${idx})"
 
         # Wait for partition device to appear
         local tries=0
@@ -237,10 +259,13 @@ _format_partitions() {
         case "${ptype}" in
             fat32|fat16) mkfs.vfat -F "${ptype#fat}" -n "${plabel^^}" "${part_dev}" ;; # dosfstools
             ext[234])    mkfs.${ptype} -F -L "${plabel}" "${part_dev}" ;;              # e2fsprogs
+            hfs)         command -v hformat &>/dev/null && hformat -l "${plabel}" "${part_dev}" \
+                         || _warn "hformat not available — skipping (grub-install writes raw)" ;; # hfsutils
             btrfs)       mkfs.btrfs -f -L "${plabel}" "${part_dev}" ;;                 # btrfs-progs
             xfs)         mkfs.xfs -f -L "${plabel}" "${part_dev}" ;;                   # xfsprogs
             f2fs)        mkfs.f2fs -l "${plabel}" "${part_dev}" ;;                     # f2fs-tools
             swap)        mkswap -L "${plabel}" "${part_dev}" ;;                        # util-linux
+            none)        _msg "  Skipping format for ${part_dev}" ;;                   # raw/bootstrap
             *)           _die "Unknown filesystem type: ${ptype}" ;;
         esac
 
@@ -262,8 +287,8 @@ _mount_image() {
     for spec in "${partitions[@]}"; do
         read -r _ _ plabel <<< "${spec}"
         case "${plabel}" in
-            root) root_dev="${loop_dev}p${idx}" ;;
-            boot) boot_dev="${loop_dev}p${idx}" ;;
+            root) root_dev="$(_part_dev ${idx})" ;;
+            boot) boot_dev="$(_part_dev ${idx})" ;;
         esac
         (( idx++ ))
     done
@@ -334,7 +359,7 @@ _chroot_customize() {
         _msg "  Running pre_install hook..."
         local pre_install_body
         pre_install_body="$(declare -f pre_install | tail -n +3 | head -n -1)"
-        env -u TMPDIR arch-chroot "${mount_root}" /bin/bash -c "${pre_install_body}"
+        env -u TMPDIR arch-chroot "${mount_root}" /bin/bash -ec "${pre_install_body}"
     fi
 
     # Remove packages
@@ -354,9 +379,19 @@ _chroot_customize() {
         _msg "  Running post_install hook..."
         local post_install_body
         post_install_body="$(declare -f post_install | tail -n +3 | head -n -1)"
-        env -u TMPDIR arch-chroot "${mount_root}" /bin/bash -c "${post_install_body}"
+        env -u TMPDIR arch-chroot "${mount_root}" /bin/bash -ec "${post_install_body}"
     fi
     _ok "Chroot customization complete"
+}
+
+_host_customize() {
+    if ! declare -f post_build &>/dev/null; then
+        return
+    fi
+
+    _msg "Running post_build hook (host-side)..."
+    post_build
+    _ok "Host customization complete"
 }
 
 _stamp_templates() {
@@ -369,13 +404,20 @@ _stamp_templates() {
 
     for spec in "${partitions[@]}"; do
         read -r _ _ plabel <<< "${spec}"
-        local part_dev="${loop_dev}p${idx}"
+        local part_dev
+        part_dev="$(_part_dev ${idx})"
         local puuid
-        puuid="$(blkid -s PARTUUID -o value "${part_dev}")"
+        puuid="$(blkid -s PARTUUID -o value "${part_dev}" 2>/dev/null || echo "")"
+        local fuuid
+        fuuid="$(blkid -s UUID -o value "${part_dev}" 2>/dev/null || echo "")"
 
         local key="%${plabel^^}_PARTUUID%"
         tpl_vars["${key}"]="${puuid}"
         _msg "  ${key} = ${puuid}"
+
+        local ukey="%${plabel^^}_UUID%"
+        tpl_vars["${ukey}"]="${fuuid}"
+        _msg "  ${ukey} = ${fuuid}"
         (( idx++ ))
     done
 
@@ -479,6 +521,7 @@ main() {
     _extract_tarball
     _apply_overlay
     _chroot_customize
+    _host_customize
     _stamp_templates
     _generate_ssh_keys
     _cleanup_boot

@@ -1,0 +1,135 @@
+#!/bin/bash
+# flash — Write an extracted .img to a block device with progress
+set -euo pipefail
+
+readonly PROGNAME="${0##*/}"
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+
+src_dir="${script_dir}/out_extract"
+
+# ── Colours ───────────────────────────────────────────────────────────────
+if [[ -t 1 ]]; then
+    B='\033[1m'; R='\033[0m'; RED='\033[1;31m'; GRN='\033[1;32m'; YLW='\033[1;33m'; CYN='\033[1;36m'
+else
+    B=''; R=''; RED=''; GRN=''; YLW=''; CYN=''
+fi
+
+_msg()  { printf "${CYN}[${PROGNAME}]${R} %s\n" "$*"; }
+_ok()   { printf "${GRN}[${PROGNAME}] ✓${R} %s\n" "$*"; }
+_warn() { printf "${YLW}[${PROGNAME}] !${R} %s\n" "$*" >&2; }
+_die()  { printf "${RED}[${PROGNAME}] ✗${R} %s\n" "$*" >&2; exit 1; }
+
+_usage() {
+    cat <<EOF
+${B}${PROGNAME}${R} — Flash an extracted image to a block device
+
+${B}Usage:${R}
+    ${PROGNAME} <image-name> <device>
+
+${B}Example:${R}
+    ${PROGNAME} archlinux-g5-ppc64-20260222 /dev/sdb
+    ${PROGNAME} archlinux-g5-ppc64-20260222.img /dev/sdb
+
+Writes out_extract/<image>.img to <device> using dd with progress.
+Must be run as root (or with sudo).
+EOF
+    exit "${1:-0}"
+}
+
+# ── Argument parsing ──────────────────────────────────────────────────────
+[[ $# -ge 2 ]] || _usage 1
+[[ "$1" == "-h" || "$1" == "--help" ]] && _usage 0
+
+input="$1"
+device="$2"
+
+# Resolve image path — allow with or without .img suffix
+if [[ "${input}" == *.img ]]; then
+    img="${src_dir}/${input}"
+else
+    img="${src_dir}/${input}.img"
+fi
+
+[[ -f "${img}" ]] || _die "Image not found: ${img}"
+[[ -b "${device}" ]] || _die "Not a block device: ${device}"
+
+# ── Safety checks ─────────────────────────────────────────────────────────
+[[ $EUID -eq 0 ]] || _die "Must run as root"
+
+# Refuse to write to mounted devices
+if findmnt -rn -o SOURCE | grep -q "^${device}"; then
+    _die "${device} has mounted partitions — unmount first"
+fi
+
+# Show device info for confirmation
+_msg "Image:  ${img##*/} ($(du -h "${img}" | cut -f1))"
+_msg "Device: ${device} ($(lsblk -dno SIZE "${device}" | xargs))"
+lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS "${device}" 2>/dev/null | sed 's/^/  /'
+echo ""
+
+read -rp "$(printf "${YLW}Write to ${device}? All data will be lost. [y/N]${R} ")" confirm
+[[ "${confirm}" =~ ^[Yy]$ ]] || { _msg "Aborted."; exit 0; }
+
+# ── Flash ─────────────────────────────────────────────────────────────────
+_msg "Flashing..."
+
+dd if="${img}" of="${device}" bs=4M status=progress conv=fsync
+
+sync
+
+_ok "Flashed ${img##*/} → ${device}"
+
+# ── Resize root partition to fill device ─────────────────────────────────
+img_size="$(stat -c %s "${img}")"
+disk_size="$(blockdev --getsize64 "${device}")"
+
+if [[ "${disk_size}" -le "${img_size}" ]]; then
+    _msg "Device is same size as image — skipping resize"
+    exit 0
+fi
+
+_msg "Expanding root partition to fill device..."
+
+# Find the last real partition (skip Apple_Free / empty trailing partitions)
+# For APM (mac): delete the trailing Apple_Free, then resize the last partition
+# For MBR/GPT: just resize the last partition
+pttype="$(blkid -o value -s PTTYPE "${device}" 2>/dev/null || echo unknown)"
+
+if [[ "${pttype}" == "mac" ]]; then
+    # APM: the trailing Apple_Free partition blocks resizing
+    # Use parted to find and remove it, then grow the root partition
+    last_num="$(parted -s "${device}" print 2>/dev/null | awk '/^ [0-9]/{n=$1} END{print n}')"
+    last_type="$(parted -s "${device}" print 2>/dev/null | awk -v n="${last_num}" '$1==n{print $NF}')"
+
+    if [[ "${last_type}" == "Free" || "${last_type}" == "Apple_Free" ]]; then
+        _msg "  Removing trailing free partition (${last_num})"
+        parted -s "${device}" rm "${last_num}"
+    fi
+
+    # Now the root partition is the last one — grow it
+    root_num="$(parted -s "${device}" print 2>/dev/null | awk '/^ [0-9]/{n=$1} END{print n}')"
+    parted -s "${device}" resizepart "${root_num}" 100%
+    root_dev="${device}${root_num}"
+
+    # Kernel re-read
+    partprobe "${device}" 2>/dev/null || true
+    sleep 1
+
+    _msg "  Resizing ext4 filesystem on ${root_dev}"
+    e2fsck -f -y "${root_dev}" 2>/dev/null || true
+    resize2fs "${root_dev}"
+else
+    # MBR / GPT: grow the last partition directly
+    root_num="$(parted -s "${device}" print 2>/dev/null | awk '/^ [0-9]/{n=$1} END{print n}')"
+    parted -s "${device}" resizepart "${root_num}" 100%
+    root_dev="${device}${root_num}"
+
+    partprobe "${device}" 2>/dev/null || true
+    sleep 1
+
+    _msg "  Resizing ext4 filesystem on ${root_dev}"
+    e2fsck -f -y "${root_dev}" 2>/dev/null || true
+    resize2fs "${root_dev}"
+fi
+
+_ok "Root partition resized to fill ${device}"

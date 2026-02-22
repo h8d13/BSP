@@ -1,11 +1,11 @@
 services:
-  builder:
+  buildit:
     build: .
     cap_add:
       - SYS_ADMIN      # mount, losetup, arch-chroot
       - MKNOD           # create /dev/loop partition nodes
     security_opt:
-      - seccomp:unconfined  # allow mount/umount/losetup syscalls
+      - seccomp=unconfined  # allow mount/umount/losetup syscalls
     devices:
       - /dev/loop-control
     device_cgroup_rules:
