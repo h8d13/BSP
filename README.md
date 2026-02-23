@@ -42,7 +42,7 @@ sudo usermod -aG docker $USER        # log out/in after or newgrp docker
 
 ## Personal credentials
 
-Create `personal-creds.conf` (anything personal-* is gitignored) to configure user creation and SSH:
+Create `personal-creds.conf` (anything `personal-*` is gitignored) to configure user creation and SSH:
 
 ```bash
 GENSSH=true
@@ -56,10 +56,11 @@ PASSWORD=changeme
 | `USERNAME` | Create user in `wheel` group with sudo access |
 | `PASSWORD` | Set password for both the user and root |
 
-With credentials, root is locked — use `sudo` from the created user.
+With credentials, root is locked, use `sudo` from the created user.
 
-Without this file, root gets an empty password for console access and SSH is disabled. To set up manually after first boot:
+Without this file, root gets an empty password for console access and SSH is disabled. 
 
+To set up manually after first boot:
 ```shell
 # Set root password
 passwd
