@@ -127,9 +127,5 @@ Files ending in `.tpl` get these replaced, then `.tpl` is stripped:
 
 `%ROOT_UUID%`, `%ROOT_PARTUUID%`, `%BOOT_UUID%`, `%BOOT_PARTUUID%`, `%BOOTSTRAP_UUID%`, `%BOOTSTRAP_PARTUUID%`, `%DATE%`
 
-## Clean
 
-```bash
-just clean                           # remove built images
-just clean-all                       # + tear down docker
-```
+---
