@@ -119,8 +119,9 @@ post_install() {
     grub-mkconfig -o /boot/grub/grub.cfg
     locale-gen
     systemctl enable NetworkManager
-    systemctl enable sshd
-    passwd -d root
+    if [[ "${GENSSH:-false}" == "true" ]]; then
+        systemctl enable sshd
+    fi
 }
 
 # Host-side hook — build GRUB core image and install to HFS bootstrap
@@ -164,20 +165,21 @@ EOCFG
         rm -f /root/core.elf /root/grub-early.cfg
     "
 
-    # Create user from personal-creds.conf
+    # Create user from personal-creds.conf and lock root, or unlock root for console
     if [[ -n "${USERNAME:-}" && -n "${PASSWORD:-}" ]]; then
-        _msg "  Creating user: ${USERNAME}"
+        _msg "  Creating user: ${USERNAME} (root locked)"
         env -u TMPDIR arch-chroot "${mount_root}" /bin/bash -ec "
             useradd -m -G wheel '${USERNAME}'
             echo '${USERNAME}:${PASSWORD}' | chpasswd
-            echo 'root:${PASSWORD}' | chpasswd
+            passwd -l root
             sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
         "
     else
         _warn "No personal-creds.conf — root has empty password"
+        env -u TMPDIR arch-chroot "${mount_root}" passwd -d root
     fi
 
     sync
 }
 
-generate_ssh_keys=true
+generate_ssh_keys="${GENSSH:-false}"

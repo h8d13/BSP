@@ -13,7 +13,7 @@ sudo usermod -aG docker $USER        # log out/in after or newgrp docker
 ## Quick start
 
 ```bash
-just buildit g5-ppc64                # builds docker image + xz compressed img in out/
+just buildit g5-ppc64                # builds docker image + gzip compressed img in out/
 just extract                         # decompresses to out_extract/
 sudo just flash <image> /dev/sdX     # writes to block device
 # optional resize the root partition
@@ -49,14 +49,21 @@ just images                          # list built images
 
 ## Personal credentials
 
-Create `personal-creds.conf` (gitignored) to set a default user:
+Create `personal-creds.conf` (gitignored) to configure user creation and SSH:
 
 ```bash
-USERNAME=john
+GENSSH=true
+USERNAME=hadean
 PASSWORD=changeme
 ```
 
-The build creates the user in the `wheel` group with sudo access. Without this file, root gets an empty password.
+| Variable | Effect |
+|---|---|
+| `GENSSH` | Generate SSH host keys and enable `sshd` |
+| `USERNAME` | Create user in `wheel` group with sudo access |
+| `PASSWORD` | Set password for both the user and root |
+
+With credentials, root is locked — use `sudo` from the created user. Without this file, root gets an empty password for console access and SSH is disabled.
 
 ## Profile structure
 
@@ -84,7 +91,7 @@ configs/<name>/
 | `bootstrap_packages` | `("archpower-keyring" "base")` |
 | `packages_install` | `("base" "linux-ppc64" "grub" ...)` |
 | `packages_remove` | Packages to remove in chroot |
-| `generate_ssh_keys` | `true` |
+| `generate_ssh_keys` | `"${GENSSH:-false}"` |
 
 ### Hooks
 
