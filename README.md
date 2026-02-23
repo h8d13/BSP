@@ -25,7 +25,7 @@ sudo ./flash archlinux-g5-ppc64-20260222 /dev/sdX
 
 | Profile | Device | Arch | Boot method |
 |---|---|---|---|
-| `rpi5` | Raspberry Pi 5 | aarch64 | config.txt |
+| `rpi5` | Raspberry Pi 5 | aarch64 | config.txt `raspberrypi-bootloader` built-in |
 | `g5-ppc64` | PowerMac G5 | ppc64 | Open Firmware (`boot ud:2,\grub`) |
 
 ## Scripts
