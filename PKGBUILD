@@ -2,7 +2,7 @@
 pkgname=BootShimPorts
 pkgver=0.1.0
 pkgrel=1
-pkgdesc='Host dependencies for building Arch Linux ARM images in Docker'
+pkgdesc='Host dependencies for building Arch Linux images in Docker'
 arch=('x86_64')
 license=('GPL-3.0-or-later')
 depends=(
