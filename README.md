@@ -12,15 +12,6 @@ just setup                           # pulls docker, qemu-user-static, etc.
 sudo usermod -aG docker $USER        # log out/in after or newgrp docker
 ```
 
-## Quick start
-
-```bash
-just buildit g5-ppc64                # builds docker image + gzip compressed img in out/
-just extract <image>                 # decompresses to out_extract/
-sudo just flash <image> /dev/sdX     # writes to block device
-# optional resize the root partition
-```
-
 ## Available profiles
 
 | Profile | Device | Arch | Boot method |
@@ -28,10 +19,6 @@ sudo just flash <image> /dev/sdX     # writes to block device
 | `rpi5` | Raspberry Pi 5 | aarch64 | config.txt `raspberrypi-bootloader` built-in |
 | `g5-ppc64` | PowerMac G5 | ppc64 | Open Firmware (`boot ud:2,\grub`) |
 
-```bash
-just profiles                        # list available profiles
-just images                          # list built images
-```
 
 ## Recipes
 
@@ -43,6 +30,7 @@ just images                          # list built images
 | `just extract [image]` | Decompress `.img.gz` from `out/` to `out_extract/` |
 | `just flash <image> <device>` | Write extracted image to block device |
 
+> optionally resize the root partition
 
 | Utilities | Usage |
 |---|---|
