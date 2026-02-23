@@ -63,7 +63,23 @@ PASSWORD=changeme
 | `USERNAME` | Create user in `wheel` group with sudo access |
 | `PASSWORD` | Set password for both the user and root |
 
-With credentials, root is locked — use `sudo` from the created user. Without this file, root gets an empty password for console access and SSH is disabled.
+With credentials, root is locked — use `sudo` from the created user.
+
+Without this file, root gets an empty password for console access and SSH is disabled. To set up manually after first boot:
+
+```shell
+# Set root password
+passwd
+
+# Create a user with sudo
+useradd -m -G wheel myuser
+passwd myuser
+sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+
+# Enable SSH
+ssh-keygen -A
+systemctl enable --now sshd
+```
 
 ## Profile structure
 
