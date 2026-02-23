@@ -1,4 +1,4 @@
-# stage-one-builder
+# BootShim Ports - BSP
 
 Build ready-to-flash Arch Linux images for any device in minutes.
 
@@ -18,6 +18,7 @@ docker compose build # pulls archlinux docker image
 docker compose run --rm buildit g5-ppc64 # xz compressed img will be in out/
 ./extract archlinux-g5-ppc64-20260222 # will be in out_extract/
 sudo ./flash archlinux-g5-ppc64-20260222 /dev/sdX
+# optional resize the root part
 ```
 
 ## Available profiles
