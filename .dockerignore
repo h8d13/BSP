@@ -2,6 +2,7 @@
 in/
 *.img
 *.img.gz
+*.img.xz
 out/
 out_extract/
 extract/

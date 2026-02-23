@@ -8,6 +8,7 @@ license=('MIT')
 depends=(
     'just'
     'arch-install-scripts'
+    'parted'
     'docker'
     'docker-compose'
     'qemu-user-static'          # Cross-arch userspace emulation

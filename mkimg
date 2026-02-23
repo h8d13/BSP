@@ -29,6 +29,7 @@ packages_remove=()
 packages_install=()
 boot_cleanup=()
 generate_ssh_keys="false"
+compression="gz"
 
 # ── Colours ──────────────────────────────────────────────────────────────────
 if [[ -t 1 ]]; then
@@ -490,13 +491,21 @@ _finalize() {
     _ok "Image finalized (loop ${detached_loop} detached)"
 }
 
+
 _compress() {
-    local out_name="${img_file##*/}.gz"
+    local ext cmd
+    case "${compression}" in
+        gz)  ext="gz";  cmd=(gzip --stdout) ;;
+        xz)  ext="xz";  cmd=(xz -T0 -6 --stdout) ;;
+        *)   _die "Unknown compression: ${compression} (use gz or xz)" ;;
+    esac
+
+    local out_name="${img_file##*/}.${ext}"
     local out_path="${out_dir}/${out_name}"
 
-    _msg "Compressing: ${out_name}"
+    _msg "Compressing: ${out_name} (${compression})"
 
-    gzip --stdout "${img_file}" > "${out_path}"
+    "${cmd[@]}" "${img_file}" > "${out_path}"
 
     local size
     size="$(du -h "${out_path}" | cut -f1)"

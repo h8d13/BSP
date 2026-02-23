@@ -6,5 +6,4 @@ out_extract/*
 .tmp/
 archiso/
 archinstoo/
-**rootfs
 personal-**.conf

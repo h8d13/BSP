@@ -1,5 +1,5 @@
 #!/bin/bash
-# extract — Decompress a specific .img.gz from out/ into out_extract/ with progress
+# extract — Decompress a specific .img.gz or .img.xz from out/ into out_extract/ with progress
 set -euo pipefail
 
 readonly PROGNAME="${0##*/}"
@@ -21,22 +21,20 @@ _die()  { printf "${RED}[${PROGNAME}] ✗${R} %s\n" "$*" >&2; exit 1; }
 
 _usage() {
     cat <<EOF
-${B}${PROGNAME}${R} — Extract .img.gz with progress
+${B}${PROGNAME}${R} — Extract compressed .img with progress
 
 ${B}Usage:${R}
     ${PROGNAME} <image-name>
 
 ${B}Example:${R}
-    ${PROGNAME} archlinuxarm-rpi5-20260222.img.gz
-    ${PROGNAME} archlinuxarm-rpi5-20260222     # .img.gz suffix is optional
+    ${PROGNAME} archlinux-g5-ppc64-20260222.img.gz
+    ${PROGNAME} archlinux-g5-ppc64-20260222.img.xz
+    ${PROGNAME} archlinux-g5-ppc64-20260222     # extension auto-detected
 
 Decompresses out/<image> into out_extract/ with a progress bar.
 EOF
     exit "${1:-0}"
 }
-
-# ── Dependency check ──────────────────────────────────────────────────────
-command -v gzip &>/dev/null || _die "Missing required tool: gzip"
 
 # ── Argument parsing ──────────────────────────────────────────────────────
 [[ $# -ge 1 ]] || _usage 1
@@ -44,19 +42,37 @@ command -v gzip &>/dev/null || _die "Missing required tool: gzip"
 
 input="$1"
 
-# Allow specifying with or without .img.gz suffix
-if [[ "${input}" == *.img.gz ]]; then
+# Resolve image path — try exact match, then .img.gz, then .img.xz
+if [[ "${input}" == *.img.gz || "${input}" == *.img.xz ]]; then
     img="${src_dir}/${input}"
 elif [[ "${input}" == *.img ]]; then
-    img="${src_dir}/${input}.gz"
+    # Try gz first, then xz
+    if [[ -f "${src_dir}/${input}.gz" ]]; then
+        img="${src_dir}/${input}.gz"
+    else
+        img="${src_dir}/${input}.xz"
+    fi
 else
-    img="${src_dir}/${input}.img.gz"
+    if [[ -f "${src_dir}/${input}.img.gz" ]]; then
+        img="${src_dir}/${input}.img.gz"
+    else
+        img="${src_dir}/${input}.img.xz"
+    fi
 fi
 
-[[ -f "${img}" ]] || _die "Not found: ${img}"
+[[ -f "${img}" ]] || _die "Not found: ${img} (looked for .img.gz and .img.xz)"
+
+# Determine decompression command from extension
+decompress_cmd=""
+ext=""
+case "${img}" in
+    *.gz) decompress_cmd="gzip -d"  ; ext=".gz" ;;
+    *.xz) decompress_cmd="xz -d"   ; ext=".xz" ;;
+    *)    _die "Unknown format: ${img}" ;;
+esac
 
 # ── Extract ───────────────────────────────────────────────────────────────
-name="$(basename "${img}" .gz)"
+name="$(basename "${img}" "${ext}")"
 dst="${dst_dir}/${name}"
 mkdir -p "${dst_dir}"
 
@@ -68,13 +84,12 @@ total="$(stat -c %s "${img}")"
 _msg "Extracting: ${img##*/} → out_extract/${name}"
 
 # Background the decompression and poll progress via bytes written to dst
-gzip -d < "${img}" > "${dst}" &
+${decompress_cmd} < "${img}" > "${dst}" &
 pid=$!
 
 while kill -0 "${pid}" 2>/dev/null; do
     if [[ -f "${dst}" ]]; then
         current="$(stat -c %s "${dst}" 2>/dev/null || echo 0)"
-        # Estimate compressed progress from decompressed output ratio
         printf "\r  %s / %s decompressed  " \
             "$(numfmt --to=iec-i --suffix=B "${current}")" \
             "$(numfmt --to=iec-i --suffix=B "${total}")"
@@ -85,6 +100,6 @@ done
 rc=0
 wait "${pid}" || rc=$?
 printf "\r                                                \r"
-[[ ${rc} -eq 0 ]] || { rm -f "${dst}"; _die "gzip decompression failed (exit ${rc})"; }
+[[ ${rc} -eq 0 ]] || { rm -f "${dst}"; _die "Decompression failed (exit ${rc})"; }
 
 _ok "${name} ($(du -h "${dst}" | cut -f1))"

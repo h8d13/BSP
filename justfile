@@ -38,7 +38,7 @@ bootstrap profile=profile:
 
 # ── Post-build ───────────────────────────────────────────────────────────────
 
-# Decompress .img.gz to out_extract/
+# Decompress .img.gz/.img.xz to out_extract/
 extract image=image:
     mkdir -p out_extract
     ./extract {{image}}
@@ -52,7 +52,7 @@ flash image=image device="":
 
 # Remove built images
 clean:
-    rm -f out/*.img.gz out_extract/*.img
+    rm -f out/*.img.gz out/*.img.xz out_extract/*.img
 
 # Full clean — images + docker + orphaned containers
 clean-all: clean
@@ -67,7 +67,7 @@ profiles:
 # List built images
 images:
     @echo "Compressed (out/):"
-    @ls -lh out/*.img.gz 2>/dev/null || echo "  (none)"
+    @ls -lh out/*.img.gz out/*.img.xz 2>/dev/null || echo "  (none)"
     @echo ""
     @echo "Extracted (out_extract/):"
     @ls -lh out_extract/*.img 2>/dev/null || echo "  (none)"

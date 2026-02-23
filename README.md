@@ -25,8 +25,8 @@ sudo usermod -aG docker $USER        # log out/in after or newgrp docker
 | Recipe | Usage |
 |---|---|
 | `just setup` | Install host dependencies and enable docker |
-| `just bootstrap [profile]` | Create a rootfs tarball from scratch |
-| `just buildit [profile]` | Build an image (default: `g5-ppc64`) |
+| `just bootstrap [profile]` | Create a rootfs tarball `.tar.gz` from scratch (in `in/`) |
+| `just buildit [profile]` | Build an image (default: `g5-ppc64`) using configs profiles  |
 | `just extract [image]` | Decompress `.img.gz` from `out/` to `out_extract/` |
 | `just flash <image> <device>` | Write extracted image to block device |
 
@@ -95,10 +95,11 @@ configs/<name>/
 | `img_size` | `2G` |
 | `partition_table` | `mac`, `msdos`, `gpt` |
 | `partitions` | `("hfs 32M bootstrap" "ext4 rest root")` |
-| `tarball` | Path to base rootfs `.tar.gz` (in `in/`) |
+| `tarball` | Path to base rootfs `.tar.gz` |
 | `bootstrap_packages` | `("archpower-keyring" "base")` |
 | `packages_install` | `("base" "linux-ppc64" "grub" ...)` |
 | `packages_remove` | Packages to remove in chroot |
+| `compression` | `gz` (default) or `xz` |
 | `generate_ssh_keys` | `"${GENSSH:-false}"` |
 
 ### Hooks
