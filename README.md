@@ -14,7 +14,7 @@ sudo usermod -aG docker $USER        # log out/in after or newgrp docker
 
 ```bash
 just buildit g5-ppc64                # builds docker image + gzip compressed img in out/
-just extract                         # decompresses to out_extract/
+just extract <image>                 # decompresses to out_extract/
 sudo just flash <image> /dev/sdX     # writes to block device
 # optional resize the root partition
 ```
