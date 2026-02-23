@@ -78,7 +78,7 @@ passwd
 # Create a user with sudo
 useradd -m -G wheel myuser
 passwd myuser
-sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
+EDITOR=nano visudo                   # uncomment %wheel ALL=(ALL:ALL) ALL
 
 # Enable SSH
 ssh-keygen -A

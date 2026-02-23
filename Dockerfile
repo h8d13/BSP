@@ -8,7 +8,6 @@ RUN pacman -Syu --noconfirm --needed \
         openssh \
         parted \
         util-linux \
-        xz \
         dosfstools \
         e2fsprogs \
         grub \
@@ -16,4 +15,4 @@ RUN pacman -Syu --noconfirm --needed \
 
 WORKDIR /build
 
-ENTRYPOINT ["/build/build"]
+ENTRYPOINT ["/build/mkimg"]

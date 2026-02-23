@@ -30,7 +30,7 @@ docker-build:
 # Build an image for a profile (default: g5-ppc64)
 buildit profile=profile: docker-build
     mkdir -p out out_extract .tmp
-    docker compose run --rm buildit {{profile}}
+    docker compose run --rm buildit -p /build/configs/{{profile}} -o /build/out
 
 # Bootstrap a rootfs tarball from scratch (requires qemu-user-static-binfmt)
 bootstrap profile=profile:

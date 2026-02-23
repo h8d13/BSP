@@ -111,6 +111,11 @@ packages_install=(
 )
 
 # Chroot hooks
+pre_install() {
+    pacman-key --init
+    pacman-key --populate archpower
+}
+
 post_install() {
     mkdir -p /boot/grub/powerpc-ieee1275 /boot/grub/fonts
     cp /usr/lib/grub/powerpc-ieee1275/*.mod /boot/grub/powerpc-ieee1275/
