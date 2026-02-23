@@ -17,7 +17,7 @@ sudo usermod -aG docker $USER        # log out/in after or newgrp docker
 | Profile | Device | Arch | Boot method |
 |---|---|---|---|
 | `rpi5` | Raspberry Pi 5 | aarch64 | config.txt `raspberrypi-bootloader` built-in |
-| `g5-ppc64` | PowerMac G5 | ppc64 | Open Firmware (`boot ud:2,\grub`) |
+| `g5` | PowerMac G5 | ppc64 | Open Firmware (`boot ud:2,\grub`) |
 
 
 ## Recipes
@@ -41,7 +41,7 @@ sudo usermod -aG docker $USER        # log out/in after or newgrp docker
 
 ## Personal credentials
 
-Create `personal-creds.conf` (gitignored) to configure user creation and SSH:
+Create `personal-creds.conf` (anything personal-* is gitignored) to configure user creation and SSH:
 
 ```bash
 GENSSH=true

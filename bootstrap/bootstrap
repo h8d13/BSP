@@ -24,7 +24,14 @@ trap 'rm -rf "${WORK}"' EXIT
 
 echo "==> Bootstrapping ${arch} rootfs for ${device_name}..."
 mkdir -p "${WORK}/rootfs"
-pacstrap -MC "${SCRIPT_DIR}/configs/${PROFILE}/pacman.conf" "${WORK}/rootfs" "${bootstrap_packages[@]}"
+
+# Temporarily disable signature checking for bootstrap — the target keyring
+# doesn't exist yet and upstream signatures may be expired. The keyring
+# package installed here populates keys for all subsequent pacman usage.
+BOOTSTRAP_CONF="${WORK}/pacman-bootstrap.conf"
+sed 's/^SigLevel.*/SigLevel = Never/' "${SCRIPT_DIR}/configs/${PROFILE}/pacman.conf" > "${BOOTSTRAP_CONF}"
+
+pacstrap -KMC "${BOOTSTRAP_CONF}" "${WORK}/rootfs" "${bootstrap_packages[@]}"
 
 echo "==> Creating tarball: ${tarball##*/}..."
 tar czf "${tarball}" -C "${WORK}/rootfs" .

@@ -73,8 +73,37 @@ read -rp "$(printf '%bWrite to %s? All data will be lost. [y/N]%b ' "${YLW}" "${
 # ── Flash ─────────────────────────────────────────────────────────────────
 _msg "Flashing..."
 
-dd if="${img}" of="${device}" bs=4M status=progress conv=fsync
+dd if="${img}" of="${device}" bs=4M status=progress oflag=direct conv=fsync
 
 sync
 
 _ok "Flashed ${img##*/} → ${device}"
+
+# ── Grow root partition to fill device ───────────────────────────────────
+# Find the ext4 partition (root)
+root_part=""
+for part in $(lsblk -ln -o NAME "${device}"); do
+    dev="/dev/${part}"
+    [[ -b "${dev}" ]] || continue
+    fstype="$(lsblk -no FSTYPE "${dev}" 2>/dev/null)"
+    if [[ "${fstype}" == "ext4" ]]; then
+        root_part="${part}"
+    fi
+done
+
+if [[ -n "${root_part}" ]]; then
+    root_dev="/dev/${root_part}"
+    partnum="$(cat "/sys/class/block/${root_part}/partition")"
+
+    _msg "Growing partition ${partnum} (${root_dev}) to fill ${device}..."
+    parted -s "${device}" resizepart "${partnum}" 100%
+
+    partprobe "${device}"
+    sleep 1
+
+    _msg "Resizing filesystem on ${root_dev}..."
+    e2fsck -fy "${root_dev}" || true
+    resize2fs "${root_dev}"
+
+    _ok "Root partition expanded to fill disk"
+fi
