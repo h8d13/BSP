@@ -8,8 +8,10 @@ license=('MIT')
 depends=(
     'just'
     'arch-install-scripts'
+    'e2fsprogs'                 # e2fsck, resize2fs (flash)
     'parted'
-    'docker'
+    'xz'                        # extract .img.xz
+    'docker'                    
     'docker-compose'
     'qemu-user-static'          # Cross-arch userspace emulation
     'qemu-user-static-binfmt'   # binfmt_misc registration for transparent execution
