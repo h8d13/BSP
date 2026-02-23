@@ -1,4 +1,5 @@
 *.tar.gz
+in/
 *.img
 *.img.gz
 out/
@@ -7,4 +8,4 @@ extract/
 ingen_tarball/
 .tmp/
 .git/
-archiso-powerpc/
+archiso/

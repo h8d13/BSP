@@ -16,6 +16,7 @@ script_dir="${SCRIPT_DIR}"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/configs/${PROFILE}/profiledef.sh"
 
+mkdir -p "${SCRIPT_DIR}/in"
 [[ -f "${tarball}" ]] && { echo "Tarball already exists: ${tarball}"; echo "Delete it first to re-bootstrap."; exit 0; }
 
 WORK="$(mktemp -d)"

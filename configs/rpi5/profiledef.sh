@@ -15,7 +15,7 @@ partitions=(
 )
 
 # Source rootfs
-tarball="${script_dir}/ArchLinuxARM-rpi-aarch64-latest.tar.gz"
+tarball="${script_dir}/in/ArchLinuxARM-rpi-aarch64-latest.tar.gz"
 
 # Personal credentials
 source "${script_dir}/personal-creds.conf" 2>/dev/null || true

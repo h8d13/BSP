@@ -20,7 +20,7 @@ partitions=(
 )
 
 # Source rootfs
-tarball="${script_dir}/ArchPOWER-ppc64-latest.tar.gz"
+tarball="${script_dir}/in/ArchPOWER-ppc64-latest.tar.gz"
 
 # Personal credentials (username/password for the default user)
 # shellcheck source=/dev/null

@@ -107,7 +107,7 @@ configs/<name>/
 | `img_size` | `2G` |
 | `partition_table` | `mac`, `msdos`, `gpt` |
 | `partitions` | `("hfs 32M bootstrap" "ext4 rest root")` |
-| `tarball` | Path to base rootfs `.tar.gz` |
+| `tarball` | Path to base rootfs `.tar.gz` (in `in/`) |
 | `bootstrap_packages` | `("archpower-keyring" "base")` |
 | `packages_install` | `("base" "linux-ppc64" "grub" ...)` |
 | `packages_remove` | Packages to remove in chroot |

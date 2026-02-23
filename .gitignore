@@ -1,9 +1,10 @@
 *.img.*
 *.tar.gz
+in/
 out/*
 out_extract/*
 .tmp/
-archiso*
+archiso/
 archinstoo/
 **rootfs
 personal-**.conf
