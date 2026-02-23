@@ -1,6 +1,6 @@
 #!/bin/bash
 # mkimg — Device-agnostic image builder
-# Reads a profile directory (archiso-style) and produces a ready-to-flash .img.xz
+# Reads a profile directory (archiso-style) and produces a ready-to-flash .img.gz
 
 set -euo pipefail
 
@@ -29,7 +29,6 @@ packages_remove=()
 packages_install=()
 boot_cleanup=()
 generate_ssh_keys="false"
-compression_opts=()
 
 # ── Colours ──────────────────────────────────────────────────────────────────
 if [[ -t 1 ]]; then
@@ -492,17 +491,12 @@ _finalize() {
 }
 
 _compress() {
-    local -a opts=()
-    if [[ -n "${compression_opts+x}" ]]; then
-        opts=("${compression_opts[@]}")
-    fi
-
-    local out_name="${img_file##*/}.xz"
+    local out_name="${img_file##*/}.gz"
     local out_path="${out_dir}/${out_name}"
 
-    _msg "Compressing: ${out_name} (xz ${opts[*]:-})"
+    _msg "Compressing: ${out_name}"
 
-    xz "${opts[@]}" --stdout "${img_file}" > "${out_path}"
+    gzip --stdout "${img_file}" > "${out_path}"
 
     local size
     size="$(du -h "${out_path}" | cut -f1)"

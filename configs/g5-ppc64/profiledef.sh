@@ -1,15 +1,6 @@
 #!/hint/bash
 # Profile: PowerMac G5 (Late 2005)
-# ArchPOWER ppc64 with GRUB via OpenFirmware  `boot ud:2,\grub` to boot from USB                                                                                                                                                                                                  
-#
-# Based on: https://github.com/kth5/archpower/wiki/Installation-%7C--NewWorld-PowerMac-with-Grub
-#
-# Since the Docker host kernel lacks the hfs module, we can't kernel-mount
-# the HFS bootstrap partition. Instead we use hfsutils (userspace HFS tools)
-# to achieve the same result as the wiki's mount-based approach:
-#   hformat  → mkfs.hfs / mount
-#   hcopy    → cp
-#   hattrib  → bless
+# ArchPOWER ppc64 with GRUB via OpenFirmware — `boot ud:2,\grub`
 #
 # Boot flow:
 #   OF loads grub from HFS bootstrap (blessed tbxi file)
@@ -21,7 +12,6 @@ arch="ppc64"
 bootstrap_packages=("archpower-keyring" "base")
 
 # Image layout — Apple Partition Map
-# (APM auto-creates a partition map entry; our partitions start after it)
 img_size="2G"
 partition_table="mac"
 partitions=(
@@ -29,117 +19,98 @@ partitions=(
     "ext4  rest  root"
 )
 
-# Source rootfs — download from https://archlinuxpower.org
+# Source rootfs
 tarball="${script_dir}/ArchPOWER-ppc64-latest.tar.gz"
 
 # Personal credentials (username/password for the default user)
 # shellcheck source=/dev/null
 source "${script_dir}/personal-creds.conf" 2>/dev/null || true
 
-# Package operations in chroot
-# Based on archiso/configs/releng-ppc64/packages.ppc64
+# Packages to install in chroot
 packages_install=(
-    # Core — must come first
-    "base"
-
-    # ArchPOWER specific
     "archpower-keyring"
-    "brotli"
-    "haveged"
+    "linux-ppc64"
+    "mkinitcpio"
+    "grub"
     "hfsutils"
     "hfsprogs"
-    "iprutils"
-    "linux-ppc64"
     "mac-fdisk"
+    "networkmanager"
+    "openssh"
+    "sudo"
 
     # System tools
-    "arch-install-scripts"
-    "bind"
-    "btrfs-progs"
+    # "arch-install-scripts"
+    # "bind"
+    # "brotli"
+    # "btrfs-progs"
     "diffutils"
-    "dosfstools"
+    # "dosfstools"
     "ethtool"
-    "exfatprogs"
+    # "exfatprogs"
+    # "haveged"
     "hdparm"
-    "lsscsi"
-    "lvm2"
-    "mdadm"
-    "mkinitcpio"
-    "mtools"
-    "ntfs-3g"
+    # "iprutils"
+    # "lsscsi"
+    # "lvm2"
+    # "mdadm"
+    # "mtools"
+    # "ntfs-3g"
     "parted"
-    "partclone"
-    "partimage"
-    "sdparm"
+    # "partclone"
+    # "partimage"
+    # "sdparm"
     "smartmontools"
-    "squashfs-tools"
-    "testdisk"
+    # "squashfs-tools"
+    # "testdisk"
     "usbutils"
-    "xfsprogs"
+    # "xfsprogs"
 
     # Networking
-    "dhclient"
+    # "dhclient"
     "dhcpcd"
-    "dnsmasq"
+    # "dnsmasq"
     "gnu-netcat"
     "iwd"
-    "linux-atm"
-    "modemmanager"
-    "nbd"
-    "ndisc6"
+    # "linux-atm"
+    # "modemmanager"
+    # "nbd"
+    # "ndisc6"
     "nfs-utils"
-    "networkmanager"
     "nmap"
-    "openssh"
-    "ppp"
-    "pptpclient"
-    "rp-pppoe"
+    # "ppp"
+    # "pptpclient"
+    # "rp-pppoe"
     "rsync"
-    "systemd-resolvconf"
-    "usb_modeswitch"
-    "vpnc"
-    "wireless-regdb"
-    "wireless_tools"
+    # "systemd-resolvconf"
+    # "usb_modeswitch"
+    # "vpnc"
+    # "wireless-regdb"
+    # "wireless_tools"
     "wpa_supplicant"
-    "wvdial"
-    "xl2tpd"
+    # "wvdial"
+    # "xl2tpd"
 
-    # Shells & terminal
-    "grml-zsh-config"
-    "kitty-terminfo"
-    "rxvt-unicode-terminfo"
-    "tmux"
-    "zsh"
-
-    # Editors & misc
+    # Optional essentials
+    # "alsa-utils"
+    # "brltty"
+    # "darkhttpd"
+    # "dmraid"
+    # "grml-zsh-config"
+    # "irssi"
+    # "kitty-terminfo"
+    # "lftp"
+    # "lynx"
     "man-db"
     "man-pages"
     "nano"
+    # "rxvt-unicode-terminfo"
+    # "tmux"
     "vim"
-    "sudo"
-
-    # Audio
-    "alsa-utils"
-
-    # Web / transfer
-    "darkhttpd"
-    "lftp"
-    "lynx"
-
-    # Chat
-    "irssi"
-
-    # Braille
-    "brltty"
-
-    # RAID
-    "dmraid"
-
-    # Boot — G5 specific
-    "grub"
+    "zsh"
 )
 
-# Chroot hooks — grub modules/config on ext4, locale, services
+# Chroot hooks
 post_install() {
     mkdir -p /boot/grub/powerpc-ieee1275 /boot/grub/fonts
     cp /usr/lib/grub/powerpc-ieee1275/*.mod /boot/grub/powerpc-ieee1275/
@@ -149,8 +120,6 @@ post_install() {
     locale-gen
     systemctl enable NetworkManager
     systemctl enable sshd
-
-    # Unlock root for console login (password set in post_build if creds provided)
     passwd -d root
 }
 
@@ -161,8 +130,6 @@ post_build() {
     root_dev="$(_part_dev 2)"
     root_uuid="$(blkid -s UUID -o value "${root_dev}")"
 
-    # Early config embedded in core.elf — tells GRUB how to find the
-    # ext4 root partition where /boot/grub/grub.cfg and modules live
     cat > "${mount_root}/root/grub-early.cfg" <<EOCFG
 search.fs_uuid ${root_uuid} root
 set prefix=(\$root)/boot/grub
@@ -171,11 +138,9 @@ EOCFG
     _msg "  root UUID: ${root_uuid}"
     _msg "  bootstrap: ${bootstrap_dev}"
 
-    # All grub/hfs operations run inside the ppc64 chroot (via QEMU)
     env -u TMPDIR arch-chroot "${mount_root}" /bin/bash -ec "
         set -x
 
-        # Build GRUB core image for Open Firmware
         grub-mkimage \
             --format=powerpc-ieee1275 \
             --output=/root/core.elf \
@@ -188,7 +153,6 @@ EOCFG
         ls -la /root/core.elf
         file /root/core.elf
 
-        # Format HFS, copy core.elf, bless for OF
         hformat -l bootstrap ${bootstrap_dev}
         hmount ${bootstrap_dev}
         hcopy /root/core.elf :grub
@@ -213,12 +177,7 @@ EOCFG
         _warn "No personal-creds.conf — root has empty password"
     fi
 
-    # Flush block device cache
     sync
 }
 
-# SSH host key generation
 generate_ssh_keys=true
-
-# Output compression
-compression_opts=("-T0" "-6")

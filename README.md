@@ -38,7 +38,7 @@ just images                          # list built images
 | `just setup` | Install host dependencies and enable docker |
 | `just bootstrap [profile]` | Create a rootfs tarball from scratch |
 | `just buildit [profile]` | Build an image (default: `g5-ppc64`) |
-| `just extract [image]` | Decompress `.img.xz` from `out/` to `out_extract/` |
+| `just extract [image]` | Decompress `.img.gz` from `out/` to `out_extract/` |
 | `just flash <image> <device>` | Write extracted image to block device |
 
 | Utilities | Usage |
@@ -84,7 +84,6 @@ configs/<name>/
 | `bootstrap_packages` | `("archpower-keyring" "base")` |
 | `packages_install` | `("base" "linux-ppc64" "grub" ...)` |
 | `packages_remove` | Packages to remove in chroot |
-| `compression_opts` | `("-T0" "-6")` |
 | `generate_ssh_keys` | `true` |
 
 ### Hooks

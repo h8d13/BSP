@@ -1,6 +1,6 @@
 *.tar.gz
 *.img
-*.img.xz
+*.img.gz
 out/
 out_extract/
 extract/

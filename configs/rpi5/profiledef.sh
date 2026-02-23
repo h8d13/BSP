@@ -38,6 +38,3 @@ boot_cleanup=("boot.scr" "boot.txt" "mkscr")
 # SSH host key generation
 generate_ssh_keys=true
 
-# Output compression
-compression="xz"
-compression_opts=("-T0" "-6")

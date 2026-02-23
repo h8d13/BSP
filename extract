@@ -1,5 +1,5 @@
 #!/bin/bash
-# extract — Decompress a specific .img.xz from out/ into out_extract/ with progress
+# extract — Decompress a specific .img.gz from out/ into out_extract/ with progress
 set -euo pipefail
 
 readonly PROGNAME="${0##*/}"
@@ -21,14 +21,14 @@ _die()  { printf "${RED}[${PROGNAME}] ✗${R} %s\n" "$*" >&2; exit 1; }
 
 _usage() {
     cat <<EOF
-${B}${PROGNAME}${R} — Extract .img.xz with progress
+${B}${PROGNAME}${R} — Extract .img.gz with progress
 
 ${B}Usage:${R}
     ${PROGNAME} <image-name>
 
 ${B}Example:${R}
-    ${PROGNAME} archlinuxarm-rpi5-20260222.img.xz
-    ${PROGNAME} archlinuxarm-rpi5-20260222     # .img.xz suffix is optional
+    ${PROGNAME} archlinuxarm-rpi5-20260222.img.gz
+    ${PROGNAME} archlinuxarm-rpi5-20260222     # .img.gz suffix is optional
 
 Decompresses out/<image> into out_extract/ with a progress bar.
 EOF
@@ -36,7 +36,7 @@ EOF
 }
 
 # ── Dependency check ──────────────────────────────────────────────────────
-command -v xz &>/dev/null || _die "Missing required tool: xz"
+command -v gzip &>/dev/null || _die "Missing required tool: gzip"
 
 # ── Argument parsing ──────────────────────────────────────────────────────
 [[ $# -ge 1 ]] || _usage 1
@@ -44,19 +44,19 @@ command -v xz &>/dev/null || _die "Missing required tool: xz"
 
 input="$1"
 
-# Allow specifying with or without .img.xz suffix
-if [[ "${input}" == *.img.xz ]]; then
+# Allow specifying with or without .img.gz suffix
+if [[ "${input}" == *.img.gz ]]; then
     img="${src_dir}/${input}"
 elif [[ "${input}" == *.img ]]; then
-    img="${src_dir}/${input}.xz"
+    img="${src_dir}/${input}.gz"
 else
-    img="${src_dir}/${input}.img.xz"
+    img="${src_dir}/${input}.img.gz"
 fi
 
 [[ -f "${img}" ]] || _die "Not found: ${img}"
 
 # ── Extract ───────────────────────────────────────────────────────────────
-name="$(basename "${img}" .xz)"
+name="$(basename "${img}" .gz)"
 dst="${dst_dir}/${name}"
 mkdir -p "${dst_dir}"
 
@@ -68,7 +68,7 @@ total="$(stat -c %s "${img}")"
 _msg "Extracting: ${img##*/} → out_extract/${name}"
 
 # Background the decompression and poll progress via bytes written to dst
-xz -d < "${img}" > "${dst}" &
+gzip -d < "${img}" > "${dst}" &
 pid=$!
 
 while kill -0 "${pid}" 2>/dev/null; do
@@ -85,6 +85,6 @@ done
 rc=0
 wait "${pid}" || rc=$?
 printf "\r                                                \r"
-[[ ${rc} -eq 0 ]] || { rm -f "${dst}"; _die "xz decompression failed (exit ${rc})"; }
+[[ ${rc} -eq 0 ]] || { rm -f "${dst}"; _die "gzip decompression failed (exit ${rc})"; }
 
 _ok "${name} ($(du -h "${dst}" | cut -f1))"
