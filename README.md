@@ -31,14 +31,17 @@ sudo usermod -aG docker $USER        # log out/in after or newgrp docker
 | `just extract [image]` | Decompress `.img.gz` from `out/` to `out_extract/` |
 | `just flash <image> <device>` | Write extracted image to block device |
 
-> optionally resize the root partition
-
 | Utilities | Usage |
 |---|---|
 | `just profiles` | List available profiles |
 | `just images` | List built images |
 | `just clean` | Remove built images |
 | `just clean-all` | Remove images + tear down docker |
+
+```
+  bootstrap ──→ tarball ──→ mkimg (in Docker) ──→ .img.gz ──→ extract ──→ flash                                                        
+     (once)       in/          (each build)         out/      out_extract/   /dev/sdX  
+```
 
 ## Personal credentials
 
