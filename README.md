@@ -6,20 +6,17 @@ Build ready-to-flash Arch Linux images for any device in minutes.
 ## Requirements
 
 ```bash
-makepkg -si                          # pulls docker, qemu-user-static, etc.
-sudo systemctl enable --now docker
-sudo usermod -aG docker $USER        # log out/in after or nwgroup docker
+just setup                           # pulls docker, qemu-user-static, etc.
+sudo usermod -aG docker $USER        # log out/in after or newgrp docker
 ```
 
 ## Quick start
 
 ```bash
-# optional create tarballs see bootstrap_type scripts
-docker compose build # pulls archlinux docker image
-docker compose run --rm buildit g5-ppc64 # xz compressed img will be in out/
-./extract archlinux-g5-ppc64-20260222 # will be in out_extract/
-sudo ./flash archlinux-g5-ppc64-20260222 /dev/sdX
-# optional resize the root part
+just buildit g5-ppc64                # builds docker image + xz compressed img in out/
+just extract                         # decompresses to out_extract/
+sudo just flash <image> /dev/sdX     # writes to block device
+# optional resize the root partition
 ```
 
 ## Available profiles
@@ -29,13 +26,26 @@ sudo ./flash archlinux-g5-ppc64-20260222 /dev/sdX
 | `rpi5` | Raspberry Pi 5 | aarch64 | config.txt `raspberrypi-bootloader` built-in |
 | `g5-ppc64` | PowerMac G5 | ppc64 | Open Firmware (`boot ud:2,\grub`) |
 
-## Scripts
+```bash
+just profiles                        # list available profiles
+just images                          # list built images
+```
 
-| Script | Usage |
+## Recipes
+
+| Recipe | Usage |
 |---|---|
-| `build <profile>` | Build an image (wraps docker compose) |
-| `extract <image>` | Decompress `.img.xz` from `out/` to `out_extract/` with progress |
-| `flash <image> <device>` | Write extracted image to block device with confirmation |
+| `just setup` | Install host dependencies and enable docker |
+| `just bootstrap [profile]` | Create a rootfs tarball from scratch |
+| `just buildit [profile]` | Build an image (default: `g5-ppc64`) |
+| `just extract [image]` | Decompress `.img.xz` from `out/` to `out_extract/` |
+| `just flash <image> <device>` | Write extracted image to block device |
+
+| Utilities | Usage |
+| `just profiles` | List available profiles |
+| `just images` | List built images |
+| `just clean` | Remove built images |
+| `just clean-all` | Remove images + tear down docker |
 
 ## Personal credentials
 
@@ -93,6 +103,6 @@ Files ending in `.tpl` get these replaced, then `.tpl` is stripped:
 ## Clean
 
 ```bash
-docker compose down
-rm -f out/*.img.xz out_extract/*.img
+just clean                           # remove built images
+just clean-all                       # + tear down docker
 ```
