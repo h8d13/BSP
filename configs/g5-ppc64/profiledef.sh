@@ -138,12 +138,6 @@ packages_install=(
     "grub"
 )
 
-# Keyring init for archpower
-pre_install() {
-    pacman-key --init
-    pacman-key --populate archpower
-}
-
 # Chroot hooks — grub modules/config on ext4, locale, services
 post_install() {
     mkdir -p /boot/grub/powerpc-ieee1275 /boot/grub/fonts

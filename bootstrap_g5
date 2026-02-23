@@ -9,21 +9,19 @@ PROFILE="${1:-}"
 [[ -z "${PROFILE}" ]] && { echo "Usage: ${0##*/} <profile>" >&2; echo "Available: $(ls "${SCRIPT_DIR}/configs/")" >&2; exit 1; }
 [[ -d "${SCRIPT_DIR}/configs/${PROFILE}" ]] || { echo "No such profile: ${PROFILE}" >&2; exit 1; }
 
+# profiledef.sh uses script_dir and exports: tarball, arch, device_name, etc.
 script_dir="${SCRIPT_DIR}"
+# shellcheck source=/dev/null
 source "${SCRIPT_DIR}/configs/${PROFILE}/profiledef.sh"
 
 [[ -f "${tarball}" ]] && { echo "Tarball already exists: ${tarball}"; echo "Delete it first to re-bootstrap."; exit 0; }
 
 WORK="$(mktemp -d)"
-trap "rm -rf ${WORK}" EXIT
-
-# Relax signature checking for bootstrap (real image build uses profile's pacman.conf)
-BOOTSTRAP_CONF="${WORK}/pacman.conf"
-sed 's/SigLevel.*/SigLevel = Never/' "${SCRIPT_DIR}/configs/${PROFILE}/pacman.conf" > "${BOOTSTRAP_CONF}"
+trap 'rm -rf "${WORK}"' EXIT
 
 echo "==> Bootstrapping ${arch} rootfs for ${device_name}..."
 mkdir -p "${WORK}/rootfs"
-pacstrap -GMC "${BOOTSTRAP_CONF}" "${WORK}/rootfs" base archpower-keyring
+pacstrap -MC "${SCRIPT_DIR}/configs/${PROFILE}/pacman.conf" "${WORK}/rootfs" archpower-keyring base
 
 echo "==> Creating tarball: ${tarball##*/}..."
 tar czf "${tarball}" -C "${WORK}/rootfs" .

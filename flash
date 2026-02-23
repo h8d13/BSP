@@ -67,7 +67,7 @@ _msg "Device: ${device} ($(lsblk -dno SIZE "${device}" | xargs))"
 lsblk -o NAME,SIZE,TYPE,MOUNTPOINTS "${device}" 2>/dev/null | sed 's/^/  /'
 echo ""
 
-read -rp "$(printf "${YLW}Write to ${device}? All data will be lost. [y/N]${R} ")" confirm
+read -rp "$(printf '%sWrite to %s? All data will be lost. [y/N]%s ' "${YLW}" "${device}" "${R}")" confirm
 [[ "${confirm}" =~ ^[Yy]$ ]] || { _msg "Aborted."; exit 0; }
 
 # ── Flash ─────────────────────────────────────────────────────────────────
