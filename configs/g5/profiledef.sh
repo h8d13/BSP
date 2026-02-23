@@ -38,6 +38,7 @@ packages_install=(
     "networkmanager"
     "openssh"
     "sudo"
+    "zram-generator"
 
     # System tools
     # "arch-install-scripts"
@@ -127,6 +128,8 @@ post_install() {
     if [[ "${GENSSH:-false}" == "true" ]]; then
         systemctl enable sshd
     fi
+    # Disable zswap — conflicts with zram
+    sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT="\(.*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 zswap.enabled=0"/' /etc/default/grub
 }
 
 # Host-side hook — build GRUB core image and install to HFS bootstrap

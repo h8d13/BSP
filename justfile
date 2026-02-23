@@ -52,7 +52,7 @@ flash image=image device="":
 
 # Remove built images
 clean:
-    rm -f out/*.img.gz out/*.img.xz out_extract/*.img
+    sudo rm -f out/*.img.gz out/*.img.xz out_extract/*.img
 
 # Full clean — images + docker + orphaned containers
 clean-all: clean

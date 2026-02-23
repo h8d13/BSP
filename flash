@@ -80,7 +80,6 @@ sync
 _ok "Flashed ${img##*/} → ${device}"
 
 # ── Grow root partition to fill device ───────────────────────────────────
-# Find the ext4 partition (root)
 root_part=""
 for part in $(lsblk -ln -o NAME "${device}"); do
     dev="/dev/${part}"
@@ -94,6 +93,16 @@ done
 if [[ -n "${root_part}" ]]; then
     root_dev="/dev/${root_part}"
     partnum="$(cat "/sys/class/block/${root_part}/partition")"
+
+    # On APM, remove the old Apple_Free entry so root can grow past it
+    pttype="$(lsblk -dno PTTYPE "${device}" 2>/dev/null || true)"
+    if [[ "${pttype}" == "mac" ]]; then
+        last_partnum="$(parted -s "${device}" print | awk '/^ [0-9]/{n=$1} END{print n}')"
+        if (( last_partnum > partnum )); then
+            _msg "Removing old Apple_Free (partition ${last_partnum})..."
+            parted -s "${device}" rm "${last_partnum}"
+        fi
+    fi
 
     _msg "Growing partition ${partnum} (${root_dev}) to fill ${device}..."
     parted -s "${device}" resizepart "${partnum}" 100%

@@ -22,7 +22,7 @@ source "${script_dir}/personal-creds.conf" 2>/dev/null || true
 
 # Package operations in chroot
 packages_remove=("linux-aarch64" "uboot-raspberrypi")
-packages_install=("linux-rpi" "raspberrypi-bootloader" "firmware-raspberrypi" "openssh")
+packages_install=("linux-rpi" "raspberrypi-bootloader" "firmware-raspberrypi" "openssh" "zram-generator")
 
 # Chroot commands to run before package operations (keyring init, etc.)
 pre_install() {
