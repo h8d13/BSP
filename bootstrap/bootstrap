@@ -1,15 +1,17 @@
 #!/bin/bash
+# shellcheck disable=SC2034,SC2154 # consumed by makepkg
+
 # bootstrap — Create a rootfs tarball for a profile using pacstrap
 # Requires: qemu-user-static-binfmt (for cross-arch), arch-install-scripts
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 PROFILE="${1:-}"
 
 [[ -z "${PROFILE}" ]] && { echo "Usage: ${0##*/} <profile>" >&2; echo "Available: $(ls "${SCRIPT_DIR}/configs/")" >&2; exit 1; }
 [[ -d "${SCRIPT_DIR}/configs/${PROFILE}" ]] || { echo "No such profile: ${PROFILE}" >&2; exit 1; }
 
-# profiledef.sh uses script_dir and exports: tarball, arch, device_name, etc.
+# profiledef.sh uses script_dir and exports: tarball, arch, device_name, bootstrap_packages, etc.
 script_dir="${SCRIPT_DIR}"
 # shellcheck source=/dev/null
 source "${SCRIPT_DIR}/configs/${PROFILE}/profiledef.sh"
@@ -21,7 +23,7 @@ trap 'rm -rf "${WORK}"' EXIT
 
 echo "==> Bootstrapping ${arch} rootfs for ${device_name}..."
 mkdir -p "${WORK}/rootfs"
-pacstrap -MC "${SCRIPT_DIR}/configs/${PROFILE}/pacman.conf" "${WORK}/rootfs" archpower-keyring base
+pacstrap -MC "${SCRIPT_DIR}/configs/${PROFILE}/pacman.conf" "${WORK}/rootfs" "${bootstrap_packages[@]}"
 
 echo "==> Creating tarball: ${tarball##*/}..."
 tar czf "${tarball}" -C "${WORK}/rootfs" .

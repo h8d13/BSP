@@ -81,6 +81,7 @@ configs/<name>/
 | `partition_table` | `mac`, `msdos`, `gpt` |
 | `partitions` | `("hfs 32M bootstrap" "ext4 rest root")` |
 | `tarball` | Path to base rootfs `.tar.gz` |
+| `bootstrap_packages` | `("archpower-keyring" "base")` |
 | `packages_install` | `("base" "linux-ppc64" "grub" ...)` |
 | `packages_remove` | Packages to remove in chroot |
 | `compression_opts` | `("-T0" "-6")` |

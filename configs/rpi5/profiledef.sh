@@ -4,6 +4,7 @@
 
 device_name="Raspberry Pi 5 Model B"
 arch="aarch64"
+bootstrap_packages=("archlinuxarm-keyring" "base")
 
 # Image layout
 img_size="4G"

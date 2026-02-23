@@ -34,7 +34,7 @@ buildit profile=profile: docker-build
 
 # Bootstrap a rootfs tarball from scratch (requires qemu-user-static-binfmt)
 bootstrap profile=profile:
-    sudo ./bootstrap_g5 {{profile}}
+    sudo ./bootstrap/bootstrap {{profile}}
 
 # ── Post-build ───────────────────────────────────────────────────────────────
 

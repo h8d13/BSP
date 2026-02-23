@@ -18,6 +18,7 @@
 
 device_name="PowerMac G5"
 arch="ppc64"
+bootstrap_packages=("archpower-keyring" "base")
 
 # Image layout — Apple Partition Map
 # (APM auto-creates a partition map entry; our partitions start after it)
