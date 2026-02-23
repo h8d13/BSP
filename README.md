@@ -39,8 +39,8 @@ sudo usermod -aG docker $USER        # log out/in after or newgrp docker
 | `just clean-all` | Remove images + tear down docker |
 
 ```
-bootstrap → tarball → mkimg (in Docker) → .img.gz → extract → flash                                               
-(once)       in/     (each build)          out/      out_extract/   /dev/sdX
+bootstrap → tarball → mkimg (in Docker) → .img.gz (or xz) → extract → flash                                               
+(once)       in/     (each build)          out/             out_extract/   /dev/sdX
 ```
 
 ## Personal credentials
