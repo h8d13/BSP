@@ -5,7 +5,7 @@ Build ready-to-flash Arch Linux images for any device in minutes.
 
 ## Requirements
 
-Install dep `pacman -S --needed just`
+Install dep `pacman -S --needed just base-devel`
 
 ```bash
 just setup                           # pulls docker, qemu-user-static, etc.
