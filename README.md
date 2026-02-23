@@ -41,7 +41,9 @@ just images                          # list built images
 | `just extract [image]` | Decompress `.img.gz` from `out/` to `out_extract/` |
 | `just flash <image> <device>` | Write extracted image to block device |
 
+
 | Utilities | Usage |
+|---|---|
 | `just profiles` | List available profiles |
 | `just images` | List built images |
 | `just clean` | Remove built images |
