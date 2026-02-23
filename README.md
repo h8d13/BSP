@@ -5,6 +5,8 @@ Build ready-to-flash Arch Linux images for any device in minutes.
 
 ## Requirements
 
+Install dep `pacman -S --needed just`
+
 ```bash
 just setup                           # pulls docker, qemu-user-static, etc.
 sudo usermod -aG docker $USER        # log out/in after or newgrp docker
