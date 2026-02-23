@@ -1,7 +1,8 @@
 # BootShim Ports - BSP
 
 Build ready-to-flash Arch Linux images for any device in minutes.
-> Docker based cross-achitecture `.img` **live system** builder.
+> Docker based cross-architecture `.img` **live system** builder.
+> Idea being to create reproducible configs for each type of specific hw.
 
 ## Requirements
 
